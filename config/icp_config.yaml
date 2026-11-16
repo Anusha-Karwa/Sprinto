@@ -8,6 +8,11 @@ fetch:
   min_visible_words: 200        # below this a 200 page is treated as a possible JS shell
   browser_timeout_seconds: 20
   max_browser_retries_per_page: 1
+  # After the browser render, a page with fewer than this many words is labelled empty_after_render.
+  # (Between this and min_visible_words = a genuinely short page; we keep it rather than discard it.)
+  min_words_after_render: 50
+  # Login wall heuristic: a password field on a page with fewer words than this
+  login_wall_max_words: 150
   accept_language: en
 
 clean:
@@ -78,4 +83,6 @@ keywords:
   enterprise: ["enterprise", "contact sales", "talk to sales", "sso", "saml", "scim", "audit log", "audit logs", "single sign-on", "dedicated support", "sla", "role-based access", "rbac"]
   compliance_roles: ["security", "compliance", "grc", "infosec", "information security", "risk", "privacy", "devsecops", "trust"]
   regulated_industries: ["bank", "banking", "fintech", "healthcare", "health", "hospital", "insurance", "government", "pharma", "payments", "financial services", "lending"]
-  regions_eu_us: ["europe", "eu", "united states", "usa", "us", "north america", "uk", "emea", "global"]
+  # NOTE: bare "us" is deliberately excluded — it matches "contact us", "about us" on every site.
+  regions_eu_us: ["europe", "european", "eu", "united states", "usa", "u s", "north america", "uk", "united kingdom", "emea", "global", "worldwide", "germany", "france", "london", "new york", "san francisco"]
+  hiring_job_words: [engineer, developer, manager, designer, analyst, lead, head, director, specialist, scientist, architect, associate, representative, executive, officer, consultant, administrator, recruiter, counsel, accountant, intern, strategist, coordinator, partner, vp, product, marketer, writer, sre, devops]

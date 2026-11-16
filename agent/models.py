@@ -27,6 +27,7 @@ class FetchFailure(str, Enum):
     robots_disallowed = "robots_disallowed"
     not_found = "not_found"
     http_error = "http_error"
+    server_error = "server_error"
     timeout = "timeout"
     connection_error = "connection_error"
 
@@ -48,6 +49,7 @@ class PageRecord(BaseModel):
     method: Literal["requests", "browser", "api", "cache", "none"] = "requests"
     from_cache: bool = False
     raw_words: int = 0
+    raw_tokens: int = 0             # tokens of the raw HTML (what we'd pay to send without CLEAN)
     clean_tokens: int = 0
     truncated: bool = False
     failure: FetchFailure | None = None
@@ -55,6 +57,8 @@ class PageRecord(BaseModel):
     clean_text: str = ""
     signals: list[Signal] = Field(default_factory=list)
     links: list[dict] = Field(default_factory=list)
+    transient: bool = Field(default=False, exclude=True)        # for the retry table; not persisted
+    retry_after: float | None = Field(default=None, exclude=True)
 
 
 # ---------- structured facts (every value quoted) ----------

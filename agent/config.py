@@ -45,6 +45,7 @@ class Settings(BaseModel):
     reviewer_id: str = "anu"
     review_mode: str = "off"
     user_agent: str = ""
+    chromium_path: str = ""
     alert_channel: str = "email"
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""

@@ -156,7 +156,7 @@ pytest
 | Phase | Step | Status |
 |---|---|---|
 | A | 1 Skeleton: configs, models, DB + migrations, llm.py, Tool + run_tool + retry table, README | ✅ |
-| A | 2 Scraper (fetch, parse, extract, clean, store) | ⏳ |
+| A | 2 Scraper (fetch, parse, extract, clean, store) | ✅ |
 | A | 3 Structure + quote verification | ⏳ |
 | A | 4 Qualify loop + rubric | ⏳ |
 | A | 5 find_poc + ranking | ⏳ |
