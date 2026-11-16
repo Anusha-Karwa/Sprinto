@@ -1,0 +1,22 @@
+# Which paths likely answer which ICP question (deterministic fallback order for the qualify loop),
+# plus ATS hosts. "Try the API before scraping": Greenhouse/Lever have public job JSON.
+
+questions:
+  Q1_b2b_saas: [/product, /platform, /about, /about-us, /solutions]
+  Q2_certified: [/security, /trust, "trust.{domain}", /compliance, /security-and-compliance, /legal/security]
+  Q3_stage: [/careers, /jobs, /about, /about-us, /company, /press, /news]
+  Q4_pressure: [/pricing, /customers, /enterprise, /case-studies, /careers]
+
+ats_hosts:
+  greenhouse: [boards.greenhouse.io, job-boards.greenhouse.io]
+  lever: [jobs.lever.co]
+  ashby: [jobs.ashbyhq.com]
+  workable: [apply.workable.com]
+
+ats_apis:
+  greenhouse: "https://boards-api.greenhouse.io/v1/boards/{token}/jobs"
+  lever: "https://api.lever.co/v0/postings/{token}?mode=json"
+
+# Never fetched by the loop (fetch_page "do not use" list)
+blocked_path_patterns: [login, signin, sign-in, signup, sign-up, register, auth, account, cart, checkout]
+blocked_hosts: [linkedin.com, twitter.com, x.com, facebook.com, instagram.com, youtube.com, crunchbase.com, techcrunch.com]

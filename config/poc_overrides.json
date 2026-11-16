@@ -1,0 +1,15 @@
+{
+  "_comment": "Apollo option (POC_SOURCE=apollo_override) and manual fixes for needs_manual_poc. Key = domain. Looked up by hand in Apollo's web UI.",
+  "example-domain.com": [
+    {
+      "first_name": "Jane",
+      "last_name": "Doe",
+      "position": "CTO",
+      "seniority": "executive",
+      "department": "engineering",
+      "confidence": 90,
+      "email": "jane@example-domain.com",
+      "source": "apollo_manual"
+    }
+  ]
+}

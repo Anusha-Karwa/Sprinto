@@ -1,0 +1,42 @@
+# Phase B — human review + feedback loop (spec §7)
+signal:
+  approved_as_is_similarity: 0.995
+  rejection_similarity: 0.30
+capture:
+  ask_human_confidence_below: 0.7
+retrieve:
+  semantic_min_cosine: 0.55
+  top_k_learnings: 5
+  max_examples: 2
+  rrf_k: 60
+  support_bonus: 0.1          # 0.1 * ln(1 + support_count)
+  dedupe_compare_top: 3
+apply:
+  window: 10
+  weights: {edit_depth: 0.5, edit_rate: 0.3, rejection_rate: 0.2}
+  dose:
+    - {min_score: 0.40, learnings: 5, examples: 2}
+    - {min_score: 0.15, learnings: 3, examples: 1}
+    - {min_score: 0.0,  learnings: 2, examples: 0}
+  max_tokens: 700
+  kill_rejection_rate: 0.5
+  kill_min_n: 5
+hitl:
+  auto_mode_enabled: false
+  min_n: 20
+  max_avg_edit_depth: 0.05
+  cost_of_wrong_email_inr: 10000
+  review_minutes: 2
+  hourly_cost_inr: 1500
+  human_sample_rate: 0.10     # even in auto mode, 1 in 10 goes to a human
+disqualified_sample_rate: 0.10
+role_buckets:
+  ceo: [ceo, founder, co-founder, cofounder, chief executive, president, managing director]
+  cto: [cto, chief technology, vp engineering, vp of engineering, head of engineering, engineering director]
+  ciso: [ciso, chief information security, head of security, head of infosec, security lead, grc, compliance]
+  coo: [coo, chief operating, operations]
+size_buckets:
+  small: [0, 49]
+  mid: [50, 200]
+  large: [201, 100000]
+reason_chips: [wrong fact, too long, wrong angle for this role, too salesy, too generic, weak hook, CTA, my personal style, other]

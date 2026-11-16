@@ -1,0 +1,103 @@
+# RETRY TABLE (spec §5) — written once, per tool, BEFORE the build.
+# Two questions per tool:
+#   (1) would trying again plausibly help?  → transient (timeout, 429, 5xx) vs permanent
+#   (2) does anything downstream depend on it? → none / yes-human-can-supply / yes-no-substitute
+# A single run_tool() wrapper (agent/tools/runner.py) applies this. No tool improvises its own handling.
+#
+# Actions:
+#   skip              – log it, move on (nothing downstream needs it)
+#   fail_company      – this company is marked FAILED with the reason; the run continues
+#   escalate          – hand to the Growth Lead with a summary
+#   abort_escalate    – stop this flow immediately AND escalate (permanent, no substitute)
+#   needs_manual_poc  – escalate variant: Growth Lead fills config/poc_overrides.json
+#   needs_human_draft – escalate variant: Growth Lead writes the email
+
+backoff:
+  base_seconds: 1.0
+  factor: 2.0
+  max_seconds: 30.0       # Retry-After from the server is honoured up to this cap
+
+policies:
+  fetch_page:
+    retries: 2
+    on_transient_exhausted: skip
+    on_permanent: {default: skip}
+    downstream: none                  # other pages may answer the question
+    overrides:
+      homepage:                       # homepage blocked → no data at all → company FAILED
+        on_transient_exhausted: fail_company
+        on_permanent: {default: fail_company}
+
+  find_poc:
+    retries: 2
+    on_transient_exhausted: needs_manual_poc
+    on_permanent: {default: needs_manual_poc}   # no_credits / no_results
+    downstream: human_can_supply                # Apollo override file
+
+  send_email.cold:
+    retries: 3
+    on_transient_exhausted: skip
+    on_permanent: {default: skip}               # invalid auth / bad recipient → skip this prospect, log
+    downstream: none
+
+  send_email.confirmation:
+    retries: 3
+    on_transient_exhausted: escalate            # meeting already booked; Growth Lead confirms by hand
+    on_permanent: {default: escalate}
+    downstream: human_can_supply
+
+  check_calendar:
+    retries: 3
+    on_transient_exhausted: escalate
+    on_permanent: {default: escalate}           # no_calendar_access
+    downstream: no_substitute
+
+  propose_time:
+    retries: 3
+    on_transient_exhausted: escalate
+    on_permanent: {default: escalate, bounce: abort_escalate}
+    downstream: no_substitute
+
+  book_meeting:
+    retries: 3                                  # the tool re-checks free/busy before every attempt
+    on_transient_exhausted: escalate
+    on_permanent: {default: abort_escalate}     # invite bounces / auth → abort immediately
+    downstream: no_substitute
+
+  update_crm:
+    retries: 2
+    on_transient_exhausted: escalate
+    on_permanent: {default: escalate}
+    downstream: human_can_supply
+    blocking: false                             # never blocks the rest of the run
+
+  escalate:
+    retries: 3
+    on_transient_exhausted: skip                # escalation itself failing is recorded as an alert row
+    on_permanent: {default: skip}
+    downstream: none
+
+  llm.structure:
+    retries: 3                                  # rate limits
+    on_transient_exhausted: fail_company
+    on_permanent: {default: fail_company}       # invalid JSON twice → no substitute
+    downstream: no_substitute
+
+  llm.draft:
+    retries: 3
+    on_transient_exhausted: needs_human_draft
+    on_permanent: {default: needs_human_draft}
+    downstream: human_can_supply
+
+  llm.default:                                  # every other LLM-only helper (classify_reply, pain_points, …)
+    retries: 3
+    on_transient_exhausted: escalate
+    on_permanent: {default: escalate}
+    downstream: human_can_supply
+
+# Iteration caps (decided now, never improvised). Code reads these; tests assert them.
+caps:
+  qualify_extra_fetches: 4
+  seq2_reply_rounds: 2
+  llm_redrafts: 1
+  llm_invalid_json_attempts: 2

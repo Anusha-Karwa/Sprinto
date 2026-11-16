@@ -1,0 +1,27 @@
+# Phases C/D — Sequence 1 and Sequence 2 (spec §8, §9)
+sequence1:
+  reply_deadline_business_days: 5
+  worker_interval_minutes: 5
+  interested_min_confidence: 0.75
+  ooo_extensions: 1
+  processed_label: sprinto/processed
+sequence2:
+  max_reply_rounds: 2
+  reply_timeout_hours: 48
+  min_confidence: 0.75
+  meeting_minutes: 30
+  slots_to_propose: 3
+  buffer_minutes: 15
+  min_notice_hours: 24
+  max_days_ahead: 30
+  hold_expiry_hours: 48
+  working_hours: {start: "10:00", end: "18:00"}   # Growth Lead (GROWTH_LEAD_TZ)
+  prospect_working_hours: {start: "09:00", end: "18:00"}
+  region_default_tz:
+    US: America/New_York
+    UK: Europe/London
+    EU: Europe/Berlin
+    IN: Asia/Kolkata
+    default: null        # unknown → never guess; ask
+gates:
+  worker_stale_minutes: 30
