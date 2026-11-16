@@ -97,7 +97,10 @@ def extract(page: ParsedPage, page_type: str | None = None, ats_jobs: list[str] 
     idx = next((i for i, b in enumerate(main) if b.level == 1), None)
     if idx is not None:
         sec["HERO"].append(main[idx].text)
-        sec["HERO"] += [b.text for b in main[idx + 1: idx + 6] if not b.level][:3]
+        for b in main[idx + 1: idx + 6]:        # up to 3 blocks, stopping at the next heading
+            if b.level or len(sec["HERO"]) >= 4:
+                break
+            sec["HERO"].append(b.text)
     if page.meta_description:
         sec["HERO"].append(page.meta_description)
     if not sec["HERO"] and page.title:

@@ -371,3 +371,10 @@ def test_live_js_shell_vs_static(tmp_path):
     js = f.fetch("https://quotes.toscrape.com/js/")
     assert static.ok and static.method == "requests"
     assert js.ok and js.method == "browser"
+
+
+def test_short_pricing_bullets_grouped_for_quotability():
+    html = page("<main><h1>Pricing</h1><h2>Enterprise</h2><ul><li>SSO</li><li>SAML and SCIM</li><li>Audit log</li>"
+                "<li>Uptime SLA</li></ul></main>")
+    cl = clean(extract(parse(html, "https://acme.io/pricing")), html)
+    assert "SSO · SAML and SCIM · Audit log · Uptime SLA" in cl.text

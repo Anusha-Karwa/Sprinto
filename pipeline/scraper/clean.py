@@ -25,6 +25,10 @@ BOILERPLATE = re.compile(
     r"follow us|subscribe to our newsletter|sign up for our newsletter|skip to (main )?content|"
     r"\b(twitter|linkedin|facebook|instagram|youtube|tiktok)\b\s*$)", re.I)
 KEEP_SHORT_SECTIONS = {"JOBS", "PRICING", "FOOTER BADGES", "CUSTOMERS", "HERO", "SECURITY"}
+# Feature lists are short bullets ("SSO", "Audit log"). The STRUCTURE step needs 5–40-word quotes,
+# so consecutive short bullets in these sections are joined into one line: "SSO · SAML and SCIM · Audit log".
+GROUP_SHORT_SECTIONS = {"PRICING", "SECURITY", "FOOTER BADGES"}
+GROUP_MAX_WORDS = 20   # short enough that quoting the whole group stays under the 40-word cap
 
 
 @dataclass
@@ -67,6 +71,8 @@ def clean(ext: ExtractResult, raw_html: str = "") -> CleanResult:
                 continue
             kept.append(line)
             section_lines.append(line)
+        if section in GROUP_SHORT_SECTIONS:
+            section_lines = _group_short(section_lines, min_words)
         if not section_lines:
             continue
         header = f"## {section}"
@@ -90,6 +96,28 @@ def clean(ext: ExtractResult, raw_html: str = "") -> CleanResult:
     text = "\n".join(out_lines).strip()
     return CleanResult(text=text, raw_tokens=approx_tokens(raw_html), clean_tokens=approx_tokens(text),
                        truncated=truncated, dropped_lines=dropped)
+
+
+def _group_short(lines: list[str], min_words: int) -> list[str]:
+    out, group = [], []
+
+    def flush():
+        if group:
+            out.append(" · ".join(group))
+            group.clear()
+
+    for line in lines:
+        short = len(line.split()) < min_words and not line.startswith("### ")
+        if short and sum(len(g.split()) for g in group) + len(line.split()) <= GROUP_MAX_WORDS:
+            group.append(line)
+        else:
+            flush()
+            if short:
+                group.append(line)
+            else:
+                out.append(line)
+    flush()
+    return out
 
 
 def _is_dupe(line: str, kept: list[str], ratio: float) -> bool:
