@@ -74,7 +74,10 @@ Rules — follow all of them:
    services agency, marketplace for consumers, or hardware. Quote the sentence that shows it.
 8. buyer: who buys it (e.g. "engineering teams", "finance leaders"), as stated.
 9. customer_example: a named customer or customer type the site says uses the product.
-10. enterprise_signal: enterprise plan, SSO/SAML/SCIM, audit logs, "contact sales", SLAs, enterprise customers.
+10. enterprise_signal: an enterprise PLAN or feature — enterprise plan/tier, SSO/SAML/SCIM, audit logs, "contact sales",
+    SLAs. NOT the word "enterprise" in a marketing tagline (e.g. "AI for the enterprise" is not a plan).
+14. region: a market the company says it SELLS to or serves (e.g. "customers in 40 countries", "offices in London").
+    NOT event venues, job locations or "global team".
 11. compliance_hiring: open roles in security, compliance, GRC, privacy, IT/infosec.
 12. recent_news_hook: a recent, specific event the company announces (launch, funding, expansion, award).
 The "REGEX HINTS" are leads to check, not evidence. Only quote from page text.

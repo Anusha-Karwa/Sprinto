@@ -283,7 +283,13 @@ def playwright_fetch(url: str) -> tuple[str, str]:
             browser = p.chromium.launch(executable_path=path, args=["--no-sandbox"])
         try:
             page = browser.new_page(user_agent=settings().user_agent or None)
-            page.goto(url, wait_until="networkidle", timeout=cfg["browser_timeout_seconds"] * 1000)
+            # Wait for "load", then give network-idle up to the remaining budget. Sites with endless
+            # analytics/chat beacons never reach networkidle; we still take what has rendered.
+            page.goto(url, wait_until="load", timeout=cfg["browser_timeout_seconds"] * 1000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:  # noqa: BLE001 — not idle is fine; content is already rendered
+                pass
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             page.wait_for_timeout(800)
             return page.content(), page.url

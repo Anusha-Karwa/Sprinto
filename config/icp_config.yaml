@@ -45,6 +45,8 @@ sufficiency:
 short_circuit:
   already_certified_rule: both  # both = SOC 2 AND ISO 27001 claimed → DROP | any = either one
   competitor_trust_center: [vanta, drata, secureframe, sprinto, thoropass, scrut]
+  # The compliance-automation vendors themselves are never prospects.
+  competitor_domains: [sprinto.com, vanta.com, drata.com, secureframe.com, thoropass.com, scrut.io, sprinto.ai]
   drop_stages: [series d, series e, series f, public, ipo, acquired]
   max_headcount: 1000
   min_headcount: 10
@@ -63,6 +65,9 @@ rubric:
     cap: 40
   expansion_gap: 15 # 0–1 of SOC2/ISO27001 AND selling to EU/US/enterprise
   b2b_clarity: 10
+
+# Regions that count as "selling to EU/US" for the expansion-gap rubric item
+expansion_regions: [europe, european, eu, united states, usa, north america, uk, united kingdom, emea, global, worldwide, germany, france, london, new york, san francisco]
 
 thresholds:
   qualified: 60

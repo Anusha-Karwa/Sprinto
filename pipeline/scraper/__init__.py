@@ -37,6 +37,11 @@ class Scraper:
     company_id: int | None = None
     log: list[str] = field(default_factory=list)
     last_parsed: ParsedPage | None = None
+    _records: dict = field(default_factory=dict)      # url → latest PageRecord (ok or failed)
+
+    @property
+    def records(self) -> list[PageRecord]:
+        return list(self._records.values())
 
     def scrape(self, url: str, page_type: str | None = None) -> PageRecord:
         ats = ats_of(url)
@@ -72,6 +77,7 @@ class Scraper:
         return self._store(rec, f.html)
 
     def _store(self, rec: PageRecord, raw_html: str) -> PageRecord:
+        self._records[rec.url] = rec
         return store_page(rec, self.domain, raw_html, conn=self.conn, run_id=self.run_id, company_id=self.company_id)
 
     def _ats_api(self, url: str, ats: str) -> PageRecord | None:
