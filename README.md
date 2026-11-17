@@ -159,7 +159,7 @@ pytest
 | A | 2 Scraper (fetch, parse, extract, clean, store) | ✅ |
 | A | 3 Structure + quote verification | ✅ |
 | A | 4 Qualify loop + rubric | ✅ |
-| A | 5 find_poc + ranking | ⏳ |
+| A | 5 find_poc + ranking | ✅ |
 | A | 6 Pain points, draft, lint, send → **email in inbox** | ⏳ |
 | B | 7–8 Review app + feedback loop | ⏳ |
 | C | 9 Sequence 1 | ⏳ |
