@@ -86,6 +86,7 @@ class GeminiProvider:
         config = types.GenerateContentConfig(
             system_instruction=system,
             temperature=0,
+            seed=7,          # fixed seed + temperature 0: as repeatable as the API allows (not a 100% guarantee)
             response_mime_type="application/json",
             response_json_schema=schema,
             thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),

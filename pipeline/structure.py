@@ -241,11 +241,36 @@ def structure(llm, domain: str, pages: list[PageRecord], prior: CompanyFacts | N
     out = run_llm(llm, "structure", SYSTEM, build_prompt(domain, pages, prior), StructureReply, **kw)
     if not out.ok:
         return prior or CompanyFacts(), [], out
-    good, rejected = verify(out.output.claims, pages)
+    claims = [_clean_claim(c) for c in out.output.claims]
+    good, rejected = verify(claims, pages)
     facts = merge(prior, good)
     if conn is not None:
-        save(conn, company_id, good, rejected)
+        # Only store what is NEW this pass (each pass re-sends earlier facts; don't duplicate rows).
+        seen = _seen_keys(prior)
+        save(conn, company_id, [c for c in good if (c.field, c.value.lower()) not in seen], rejected)
     return facts, rejected, out
+
+
+_CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def _clean_claim(c: Claim) -> Claim:
+    """Models sometimes emit control characters instead of separators like '·'."""
+    return c.model_copy(update={"quote": " ".join(_CTRL.sub(" ", c.quote).split()), "value": _CTRL.sub(" ", c.value).strip()})
+
+
+def _seen_keys(prior: CompanyFacts | None) -> set[tuple[str, str]]:
+    if not prior:
+        return set()
+    keys = set()
+    rev = {v: k for k, v in LIST_FIELD.items()}
+    for name, val in prior:
+        items = val if isinstance(val, list) else ([val] if val is not None else [])
+        for it in items:
+            field = "certification" if name == "certifications" else rev.get(name, name)
+            v = it.name if name == "certifications" else str(it.value)
+            keys.add((field, v.lower()))
+    return keys
 
 
 def save(conn, company_id, good: list[Claim], rejected: list[RejectedClaim]) -> None:

@@ -30,11 +30,11 @@ hitl:
   hourly_cost_inr: 1500
   human_sample_rate: 0.10     # even in auto mode, 1 in 10 goes to a human
 disqualified_sample_rate: 0.10
-role_buckets:
-  ceo: [ceo, founder, co-founder, cofounder, chief executive, president, managing director]
-  cto: [cto, chief technology, vp engineering, vp of engineering, head of engineering, engineering director]
+role_buckets:   # checked IN THIS ORDER: a "Co-Founder & CTO" is a CTO, not a CEO
   ciso: [ciso, chief information security, head of security, head of infosec, security lead, grc, compliance]
+  cto: [cto, chief technology, vp engineering, vp of engineering, head of engineering, engineering director]
   coo: [coo, chief operating, operations]
+  ceo: [ceo, founder, co-founder, cofounder, chief executive, president, managing director]
 size_buckets:
   small: [0, 49]
   mid: [50, 200]

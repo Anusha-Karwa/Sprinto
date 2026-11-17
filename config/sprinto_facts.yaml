@@ -1,7 +1,9 @@
 # The ONLY claims about Sprinto that an email may make (spec §3, §6.5, Air Canada lesson).
 # >>> PLACEHOLDERS — Anu must verify each line on sprinto.com before a real prospect sees it. <<<
 # The lint step rejects any capability not listed here.
-verified: false   # flip to true once every line below has been checked on sprinto.com
+verified: false   # flip to true once Anu has checked every line below on sprinto.com
+# 2026-11-17: each capability below matches wording on Sprinto's own pages (source URLs listed).
+# Numeric marketing claims ("65% savings", "audit-ready in 30 days") are deliberately NOT included.
 
 company: Sprinto
 one_liner: "Sprinto automates compliance certifications like SOC 2, ISO 27001, GDPR and HIPAA for SaaS companies."
@@ -9,15 +11,19 @@ one_liner: "Sprinto automates compliance certifications like SOC 2, ISO 27001, G
 capabilities:
   - id: evidence_automation
     text: "automates evidence collection by integrating with your cloud, HR and code tools"
+    source: https://sprinto.com/lp/soc-2/   # "SOC 2 that doesn't steal engineering sprints"; 300+ integrations
     best_for: [cto, vp_engineering, head_security]
   - id: continuous_monitoring
     text: "continuously monitors your controls and flags drift before the auditor does"
+    source: https://sprinto.com/continuous-compliance/
     best_for: [ciso, head_security, grc]
   - id: multi_framework
     text: "lets you reuse the same controls across SOC 2, ISO 27001, GDPR and HIPAA"
+    source: https://go.sprinto.com/lp-soc-2-platform
     best_for: [ceo, cto, ciso, grc]
   - id: audit_ready
     text: "takes you from setup to audit-ready without hiring a dedicated compliance team"
+    source: https://go.sprinto.com/lp-na-soc-compliance   # "Be audit-ready in weeks, not months"
     best_for: [ceo, founder, coo]
 
 cta_options:
