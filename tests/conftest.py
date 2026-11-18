@@ -30,3 +30,15 @@ def test_db():
     conn = connect(url)
     yield conn
     conn.close()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_google(monkeypatch):
+    """Tests must NEVER reach real Gmail/Calendar (a test once sent real mail to the fake test address)."""
+    import agent.google_auth as ga
+
+    def blocked(*a, **k):
+        raise RuntimeError("real Google API blocked in tests")
+    monkeypatch.setattr(ga, "gmail", blocked)
+    monkeypatch.setattr(ga, "calendar", blocked)
+    monkeypatch.setattr(ga, "credentials", blocked)

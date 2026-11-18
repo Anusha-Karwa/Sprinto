@@ -231,6 +231,24 @@ async def review_submit(draft_id: int, request: Request, user: str = Depends(req
     return page(request, "result.html", "review", res=res)
 
 
+@app.get("/pipeline", response_class=HTMLResponse)
+def pipeline(request: Request, user: str = Depends(require_login), conn=Depends(db)):
+    """Every prospect thread with its state fields, messages (with the robot's reading), CRM stage and escalations."""
+    threads = conn.execute(
+        """SELECT t.*, c.domain, ct.first_name, ct.last_name, ct.position, cd.stage, cd.reason AS crm_reason
+           FROM outreach_threads t JOIN companies c ON c.id=t.company_id LEFT JOIN drafts d ON d.id=t.draft_id
+           LEFT JOIN contacts ct ON ct.id=d.contact_id LEFT JOIN crm_deals cd ON cd.thread_id=t.id ORDER BY t.id DESC""").fetchall()
+    out = []
+    for t in threads:
+        t = dict(t)
+        t["messages"] = conn.execute("""SELECT direction, kind, status, subject, left(body, 600) AS body, classification, reply_intent,
+                                               confidence, quote, created_at FROM outreach_messages WHERE thread_id=%s ORDER BY id""",
+                                     (t["id"],)).fetchall()
+        t["escalations"] = conn.execute("SELECT * FROM escalations WHERE thread_id=%s ORDER BY id", (t["id"],)).fetchall()
+        out.append(t)
+    return page(request, "pipeline.html", "pipeline", threads=out)
+
+
 @app.get("/questions", response_class=HTMLResponse)
 def questions(request: Request, user: str = Depends(require_login), conn=Depends(db)):
     qs = conn.execute("SELECT id, ask_why, situation FROM feedback_events WHERE user_id=%s AND needs_reason ORDER BY id",

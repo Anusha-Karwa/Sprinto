@@ -81,3 +81,7 @@ def test_home_shows_inbox_checker_and_button(client, test_db, monkeypatch):
     monkeypatch.setattr(w, "run_once", lambda conn: {"processed": [("m1", "not_interested")], "closed_no_reply": [], "skipped": []})
     r = client.post("/check-inbox", headers=AUTH, follow_redirects=False)
     assert r.status_code == 303 and "not_interested" in r.headers["location"]
+
+
+def test_pipeline_page(client, test_db):
+    assert "No threads yet" in client.get("/pipeline", headers=AUTH).text

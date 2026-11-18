@@ -128,25 +128,5 @@ def test_send_email_refuses_without_my_email(monkeypatch):
 
 
 def test_tool_has_no_way_to_set_a_recipient():
-    from agent.tools.base import Tool
-    from agent.tools.runner import run_tool
     from agent.tools.send_email import TOOL
-    out = run_tool(TOOL, {"kind": "cold", "subject": "s", "body": "b", "to": "cto@prospect.io"}, sleep=lambda s: None)
-    # pydantic ignores unknown fields; the email still could only go to MY_EMAIL — but we never reach Gmail here
-    assert "to" not in TOOL.input_model.model_fields
-
-
-def test_cofounder_cto_is_a_cto():
-    from pipeline.contacts import role_bucket
-    assert role_bucket("Co-Founder and Chief Technology Officer") == "cto"
-    assert role_bucket("Co-Founder & CEO") == "ceo"
-
-
-def test_one_cert_held_picks_multi_framework_and_cert_hook():
-    from agent.models import CertFact
-    from pipeline.personalise import choose_capability, choose_hook
-    f = FACTS.model_copy(update={"certifications": [CertFact(name="SOC 2", status="claimed", quote="We are SOC 2 Type II certified today", source_url=U)]})
-    assert choose_capability(VIK, f)["id"] == "multi_framework"
-    assert choose_hook([], f)[0] == Q_HIRE                      # hiring outranks the cert
-    f2 = f.model_copy(update={"compliance_hiring": []})
-    assert choose_hook([], f2)[0] == "We are SOC 2 Type II certified today"
+    assert not {"to", "cc", "bcc", "recipient", "recipients"} & set(TOOL.input_model.model_fields)

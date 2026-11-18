@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block body %}
+<h1>Pipeline</h1>
+<p class="muted">Every email thread the robot is handling: its state, every message with the robot's reading, and the CRM stage.</p>
+{% for t in threads %}
+<div class="card">
+  <h3>{{ t.first_name or '' }} {{ t.last_name or '' }} · {{ t.position or '' }} @ {{ t.domain }}
+    <span class="pill">{{ t.stage or 'no CRM stage' }}</span> <span class="pill">{{ t.status }}</span></h3>
+  <p class="small">reply_status <b>{{ t.reply_status }}</b> · sequence {{ t.sequence }} · current step <b>{{ t.current_node }}</b>
+   · reply deadline {{ t.deadline_at.strftime('%d %b %H:%M UTC') if t.deadline_at else '–' }}
+   {% if t.gmail_thread_id %}· <a href="https://mail.google.com/mail/u/0/#all/{{ t.gmail_thread_id }}">thread in Gmail</a>{% endif %}</p>
+  {% if t.crm_reason %}<p class="small muted">CRM reason: {{ t.crm_reason }}</p>{% endif %}
+  {% if t.prospect_proposed_times %}<p class="small">Times they suggested: {{ t.prospect_proposed_times|join(', ') }}</p>{% endif %}
+  <div class="scroll"><table>
+  {% for m in t.messages %}<tr><td class="small">{{ m.created_at.strftime('%d %b %H:%M') }}</td><td>{{ '→ out' if m.direction=='out' else '← in' }} {{ m.kind or '' }}</td>
+  <td class="small">{% if m.direction=='in' %}{{ m.body }}{% else %}{{ m.subject }}{% endif %}</td>
+  <td class="small">{% if m.classification %}<b>{{ m.classification }}</b>/{{ m.reply_intent }} ({{ '%.2f'|format(m.confidence or 0) }})<br>“{{ m.quote }}”{% endif %}</td></tr>{% endfor %}
+  </table></div>
+  {% for e in t.escalations %}<p class="QUALIFIED_FLAGGED small">Escalated: {{ e.reason }} ({{ e.status }})</p>{% endfor %}
+</div>
+{% else %}<p class="muted">No threads yet. Approve an email in the Review queue to start one.</p>{% endfor %}
+{% endblock %}
