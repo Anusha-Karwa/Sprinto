@@ -145,31 +145,38 @@ HOOK_ORDER = ["recent_news_hook", "compliance_hiring", "cert_in_progress", "one_
               "enterprise_signals", "customer_examples", "regions", "product_one_liner"]
 
 
-def choose_hook(pains: list[PainPoint], facts: CompanyFacts) -> tuple[str, str]:
-    """Hook = the most compliance-relevant VERIFIED fact, in a fixed priority order (code, not the model):
+def hook_candidates(facts: CompanyFacts) -> list[tuple[str, str, str]]:
+    """[(hook_type, quote, url)] in the fixed priority order:
     news > security/compliance hiring > certification in progress > holds one of SOC 2/ISO 27001 >
-    enterprise plan > other enterprise signals > customers > regions > what they sell. Returns (quote, url)."""
-    def first(items):
-        return (items[0].quote, items[0].source_url) if items else None
-
+    enterprise plan > other enterprise signals > customers > regions > what they sell."""
     held = [c for c in facts.certifications if c.status == "claimed" and c.name in ("SOC 2", "ISO 27001")]
     ent = facts.enterprise_signals
-    candidates = {
-        "recent_news_hook": first([facts.recent_news_hook] if facts.recent_news_hook else []),
-        "compliance_hiring": first(facts.compliance_hiring),
-        "cert_in_progress": first([c for c in facts.certifications if c.status == "in_progress"]),
-        "one_cert_held": first(held) if len(held) == 1 else None,
-        "enterprise_plan": first([e for e in ent if "enterprise" in norm(f"{e.value} {e.quote}")]),
-        "enterprise_signals": first(ent),
-        "customer_examples": first(facts.customer_examples),
-        "regions": first(facts.regions),
-        "product_one_liner": first([facts.product_one_liner] if facts.product_one_liner else []),
+    pools = {
+        "recent_news_hook": [facts.recent_news_hook] if facts.recent_news_hook else [],
+        "compliance_hiring": facts.compliance_hiring,
+        "cert_in_progress": [c for c in facts.certifications if c.status == "in_progress"],
+        "one_cert_held": held if len(held) == 1 else [],
+        "enterprise_plan": [e for e in ent if "enterprise" in norm(f"{e.value} {e.quote}")],
+        "enterprise_signals": ent,
+        "customer_examples": facts.customer_examples,
+        "regions": facts.regions,
+        "product_one_liner": [facts.product_one_liner] if facts.product_one_liner else [],
     }
-    for k in HOOK_ORDER:
-        if candidates[k]:
-            return candidates[k]
+    return [(k, pools[k][0].quote, pools[k][0].source_url) for k in HOOK_ORDER if pools[k]]
+
+
+def choose_hook(pains: list[PainPoint], facts: CompanyFacts) -> tuple[str, str]:
+    """Hook = the most compliance-relevant VERIFIED fact, chosen by code in a fixed order. Returns (quote, url)."""
+    c = hook_candidates(facts)
+    if c:
+        return c[0][1], c[0][2]
     vq = verified_quotes(facts)
     return (vq[0][1], vq[0][2]) if vq else ("", "")
+
+
+def hook_type(facts: CompanyFacts) -> str:
+    c = hook_candidates(facts)
+    return c[0][0] if c else "other"
 
 
 def draft_email(llm, facts: CompanyFacts, contact: Contact, pains: list[PainPoint], domain: str, *,

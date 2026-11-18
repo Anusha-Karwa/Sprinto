@@ -23,11 +23,21 @@ from agent.llm import LLM, cost_of
 from agent.tools.runner import run_tool
 from agent.tools.send_email import TOOL as SEND_EMAIL
 from pipeline.contacts import find_contacts, hunter_credits
-from pipeline.personalise import write_email
+from feedback.retrieve_apply import build_injection
+from feedback.review import ensure_user
+from pipeline.personalise import hook_type, write_email
 from pipeline.qualify import qualify
 from pipeline.scraper import Fetcher
 
 con = Console(width=150)
+
+
+def get_embedder():
+    from feedback.embed import GeminiEmbedder
+    global _EMB
+    if "_EMB" not in globals():
+        _EMB = GeminiEmbedder()
+    return _EMB
 
 
 @dataclass
@@ -117,29 +127,40 @@ def process(domain: str, llm: LLM, fetcher: Fetcher, conn, run_id: int, dry_run:
     if poc.size_source.startswith("size unknown"):
         row.flags.append("company_size_unknown")
 
-    pkg = write_email(llm, q.facts, c, domain, q.verdict, log_kw=kw)
+    review_on = settings().review_mode == "on"
+    inj = None
+    htype = hook_type(q.facts)
+    if review_on:
+        # Phase B "Apply": inject this reviewer's learnings for THIS segment (role × size), dosed by disagreement.
+        ensure_user(conn, settings().reviewer_id)
+        one_liner = q.facts.product_one_liner.value if q.facts.product_one_liner else ""
+        inj = build_injection(conn, get_embedder(), user_id=settings().reviewer_id, role_bucket=c.role_bucket or "other",
+                              size_bucket=poc.size_bucket, query=f"{c.role_bucket} {poc.size_bucket} {htype} {one_liner}")
+    pkg = write_email(llm, q.facts, c, domain, q.verdict, injected_block=inj.block if inj else "", log_kw=kw)
     row.flags += pkg.flags
     if pkg.draft is None:
         return done("needs_human_draft", "; ".join(pkg.lint.problems)[:200])
     contact_id = conn.execute("SELECT id FROM contacts WHERE company_id=%s AND rank=1", (company_id,)).fetchone()
-    review_on = settings().review_mode == "on"
     status = "needs_human_edit" if not pkg.lint.ok else ("pending_review" if (review_on or dry_run) else "approved")
     draft_id = conn.execute(
         """INSERT INTO drafts (company_id, contact_id, user_id, status, subject, body, hook_quote, capability_id, pain_points,
-                               lint, full_prompt, role_bucket, size_bucket)
-           VALUES (%s,%s,NULL,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-        (company_id, contact_id["id"] if contact_id else None, status, pkg.draft.subject, pkg.draft.body, pkg.draft.hook_quote,
-         pkg.draft.capability_id, Jsonb([p.model_dump() for p in pkg.pains]), Jsonb(pkg.lint.model_dump()), pkg.prompt,
-         c.role_bucket, poc.size_bucket)).fetchone()["id"]
+                               lint, full_prompt, role_bucket, size_bucket, hook_type, injected_learning_ids, injected_block)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+        (company_id, contact_id["id"] if contact_id else None, settings().reviewer_id if review_on else None, status,
+         pkg.draft.subject, pkg.draft.body, pkg.draft.hook_quote, pkg.draft.capability_id,
+         Jsonb([p.model_dump() for p in pkg.pains]), Jsonb(pkg.lint.model_dump()), pkg.prompt, c.role_bucket or "other",
+         poc.size_bucket, htype, inj.learning_ids if inj else [], inj.block if inj else None)).fetchone()["id"]
 
     if not pkg.lint.ok:
         return done("needs_human_edit", "lint: " + "; ".join(pkg.lint.problems)[:180])
     done("drafted")     # fills cost/time so the notes are accurate
     subject = f"[TEST → {c.first_name} {c.last_name or ''}, {c.position} @ {domain}] {pkg.draft.subject}".replace("  ", " ")
     body = pkg.draft.body + pipeline_notes(domain, q, poc, pkg, row)
-    if dry_run or review_on:
+    if review_on:
+        return done("pending_review", f"draft {draft_id} waiting in the Review Queue")
+    if dry_run:
         con.print(f"\n{subject}\n{body}\n", markup=False, highlight=False)
-        return done("pending_review" if review_on else "dry_run")
+        return done("dry_run")
     out = run_tool(SEND_EMAIL, {"kind": "cold", "subject": subject, "body": body}, **kw)
     if not out.ok:
         return done("send_failed", f"{out.error_class}: {out.error_detail}"[:200])
