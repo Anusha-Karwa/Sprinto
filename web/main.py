@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from agent.config import feedback_cfg, settings
+from agent.config import feedback_cfg, outreach_cfg, settings
 from agent.db import connect, migrate
 
 app = FastAPI(title="Sprinto Outbound", docs_url=None, redoc_url=None)
@@ -105,7 +105,23 @@ def home(request: Request, user: str = Depends(require_login), conn=Depends(db))
          "companies": one("SELECT count(*) n FROM companies WHERE status NOT IN ('queued','processing')"),
          "qualified": one("SELECT count(DISTINCT company_id) n FROM verdicts WHERE verdict IN ('QUALIFIED','QUALIFIED_FLAGGED')"),
          "pending": one("SELECT count(*) n FROM drafts WHERE status IN ('pending_review','needs_human_edit')")}
-    return page(request, "home.html", "home", k=k, review_mode=settings().review_mode)
+    hb = conn.execute("SELECT EXTRACT(EPOCH FROM now() - ticked_at)/60 AS mins FROM worker_heartbeats WHERE worker='sequence1'").fetchone()
+    mins = round(float(hb["mins"])) if hb else None
+    stale = outreach_cfg()["gates"]["worker_stale_minutes"]
+    tracked = one("SELECT count(*) n FROM outreach_threads WHERE status='active' AND gmail_thread_id IS NOT NULL")
+    return page(request, "home.html", "home", k=k, review_mode=settings().review_mode, worker_mins=mins,
+                worker_stale=(mins is None or mins > stale), stale_limit=stale, tracked=tracked)
+
+
+@app.post("/check-inbox")
+def check_inbox(user: str = Depends(require_login), conn=Depends(db)):
+    from outreach.worker import run_once
+    rep = run_once(conn)
+    done = [f"{gid}: {what}" for gid, what in rep["processed"]]
+    msg = (f"Inbox checked. {len(done)} new repl{'y' if len(done) == 1 else 'ies'} handled"
+           + (": " + "; ".join(r for _, r in rep["processed"]) if done else "") +
+           (f". Closed for no reply: {len(rep['closed_no_reply'])}" if rep["closed_no_reply"] else "") + ".")
+    return RedirectResponse(f"/?msg={msg}", status_code=303)
 
 
 @app.post("/runs")

@@ -9,6 +9,14 @@
 </div>
 <p class="muted small">Emails sent is activity, not outcome. The number that matters is meetings booked.</p>
 <div class="card">
+  <h3>Inbox checker</h3>
+  {% if worker_mins is none %}<p class="FAILED">The inbox has never been checked. Is the schedule (cron-job.org) set up?</p>
+  {% elif worker_stale %}<p class="FAILED">Last checked {{ worker_mins }} minutes ago — more than {{ stale_limit }}. The schedule may have stopped.</p>
+  {% else %}<p class="ok">Last checked {{ worker_mins }} minute{{ '' if worker_mins == 1 else 's' }} ago (schedule running).</p>{% endif %}
+  <p class="small muted">{{ tracked }} email thread(s) are being watched for replies.</p>
+  <form method="post" action="/check-inbox"><button>Check inbox now</button></form>
+</div>
+<div class="card">
   <h3>Start a run</h3>
   <form method="post" action="/runs">
     <p class="small muted">One website per line (e.g. spendflo.com). Companies are queued and processed a few at a time.</p>

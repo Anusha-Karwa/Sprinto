@@ -70,3 +70,14 @@ def test_review_and_company_pages_render(client, test_db):
     assert client.get("/questions", headers=AUTH).status_code == 200
     assert client.post(f"/review/{did}", data={"action": "reject", "subject": "s", "body": "b"}, headers=AUTH,
                        follow_redirects=False).headers["location"].startswith("/review?msg=Rejecting")
+
+
+def test_home_shows_inbox_checker_and_button(client, test_db, monkeypatch):
+    r = client.get("/", headers=AUTH)
+    assert "never been checked" in r.text and "Check inbox now" in r.text
+    test_db.execute("INSERT INTO worker_heartbeats (worker, ticked_at) VALUES ('sequence1', now() - interval '3 minutes')")
+    assert "Last checked 3 minutes ago" in client.get("/", headers=AUTH).text
+    import outreach.worker as w
+    monkeypatch.setattr(w, "run_once", lambda conn: {"processed": [("m1", "not_interested")], "closed_no_reply": [], "skipped": []})
+    r = client.post("/check-inbox", headers=AUTH, follow_redirects=False)
+    assert r.status_code == 303 and "not_interested" in r.headers["location"]
