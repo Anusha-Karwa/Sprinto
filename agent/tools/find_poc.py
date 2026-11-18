@@ -36,14 +36,24 @@ class FindPocOutput(BaseModel):
     credits_left: float | None = None
 
 
-def hunter_credits(session=requests) -> float | None:
-    """Free call. Returns remaining searches, or None if unknown."""
+_CREDITS_CACHE: dict = {}
+
+
+def hunter_credits(session=requests, max_age: float = 600) -> float | None:
+    """Free call. Returns remaining searches, or None if unknown. Cached 10 min for dashboards (an HTTP call per
+    page load is slow); find_poc passes max_age=0 so the pre-search credit check is always fresh."""
+    import time as _t
     key = settings().hunter_api_key
     if not key:
         return None
+    hit = _CREDITS_CACHE.get(key)
+    if hit and _t.monotonic() - hit[1] < max_age:
+        return hit[0]
     try:
         r = session.get(f"{HUNTER}/account", params={"api_key": key}, timeout=15)
-        return r.json()["data"]["requests"]["searches"]["remaining"]
+        val = r.json()["data"]["requests"]["searches"]["remaining"]
+        _CREDITS_CACHE[key] = (val, _t.monotonic())
+        return val
     except Exception:  # noqa: BLE001 — informational only
         return None
 
@@ -74,7 +84,7 @@ def find_poc(domain: str, session=requests) -> FindPocOutput:
     key = settings().hunter_api_key
     if not key:
         raise PermanentToolError("invalid_auth", "HUNTER_API_KEY is not set")
-    credits = hunter_credits(session)
+    credits = hunter_credits(session, max_age=0)
     if credits is not None and credits < 1:
         raise PermanentToolError("no_credits", "Hunter free searches used up for this month")
     try:

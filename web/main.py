@@ -31,17 +31,31 @@ BUDGET_SECONDS = float(os.environ.get("PROCESS_BUDGET_SECONDS", "200"))   # Hobb
 _migrated = False
 
 
+_pool = None
+
+
+def pool():
+    """Connections are REUSED across requests on a warm instance. Opening a new Postgres connection costs ~8 network
+    round trips (TCP + TLS + auth) — about 2 s when the app and the database are on different continents."""
+    global _pool
+    if _pool is None:
+        from psycopg.rows import dict_row
+        from psycopg_pool import ConnectionPool
+        _pool = ConnectionPool(settings().database_url, min_size=1, max_size=4, open=True, timeout=20,
+                               max_idle=240,                      # Neon suspends idle computes after ~5 min
+                               check=ConnectionPool.check_connection,
+                               kwargs={"autocommit": True, "row_factory": dict_row, "prepare_threshold": None})
+    return _pool
+
+
 def db(request: Request):
     global _migrated
-    if not _migrated:
-        migrate(verbose=False)          # idempotent; runs once per cold start
-        _migrated = True
-    conn = connect()
-    request.state.conn = conn           # lets page() add the sidebar badges without every route passing it
-    try:
+    with pool().connection() as conn:
+        if not _migrated:
+            migrate(verbose=False)          # idempotent; runs once per cold start
+            _migrated = True
+        request.state.conn = conn           # lets page() add the sidebar badges without every route passing it
         yield conn
-    finally:
-        conn.close()
 
 
 def require_login(creds: HTTPBasicCredentials = Depends(security)) -> str:
@@ -58,20 +72,19 @@ TITLES = {"home": "Overview", "runs": "Runs", "review": "Review queue", "pipelin
 
 
 def chrome(conn) -> dict:
-    """Sidebar badges (what needs the Growth Lead) + inbox-checker status, on every page."""
+    """Sidebar badges (what needs the Growth Lead) + inbox-checker status, on every page — in ONE round trip."""
     if conn is None:
         return {"badges": {}, "worker_mins": None, "worker_ok": False}
-    one = lambda sql: conn.execute(sql).fetchone()["n"]  # noqa: E731
-    badges = {
-        "review": one("SELECT count(*) n FROM drafts WHERE status IN ('pending_review','needs_human_edit') AND user_id IS NOT NULL"),
-        "escalations": one("SELECT count(*) n FROM escalations WHERE status='open'"),
-        "active": one("SELECT count(*) n FROM outreach_threads WHERE status='active'"),
-        "questions": one("SELECT count(*) n FROM feedback_events WHERE needs_reason"),
-        "queued": one("SELECT count(*) n FROM companies WHERE status IN ('queued','processing')"),
-        "fn_check": one("SELECT count(*) n FROM verdicts WHERE verdict='DISQUALIFIED' AND fn_check_answer IS NULL"),
-    }
-    hb = conn.execute("SELECT EXTRACT(EPOCH FROM now() - ticked_at)/60 AS m FROM worker_heartbeats WHERE worker='sequence1'").fetchone()
-    mins = round(float(hb["m"])) if hb else None
+    r = conn.execute("""SELECT
+        (SELECT count(*) FROM drafts WHERE status IN ('pending_review','needs_human_edit') AND user_id IS NOT NULL) AS review,
+        (SELECT count(*) FROM escalations WHERE status='open') AS escalations,
+        (SELECT count(*) FROM outreach_threads WHERE status='active') AS active,
+        (SELECT count(*) FROM feedback_events WHERE needs_reason) AS questions,
+        (SELECT count(*) FROM companies WHERE status IN ('queued','processing')) AS queued,
+        (SELECT count(*) FROM verdicts WHERE verdict='DISQUALIFIED' AND fn_check_answer IS NULL) AS fn_check,
+        (SELECT EXTRACT(EPOCH FROM now() - ticked_at)/60 FROM worker_heartbeats WHERE worker='sequence1') AS mins""").fetchone()
+    mins = round(float(r["mins"])) if r["mins"] is not None else None
+    badges = {k: r[k] for k in ("review", "escalations", "active", "questions", "queued", "fn_check")}
     return {"badges": badges, "worker_mins": mins,
             "worker_ok": mins is not None and mins <= outreach_cfg()["gates"]["worker_stale_minutes"]}
 
@@ -87,12 +100,17 @@ def page(request: Request, name: str, nav: str, **ctx) -> HTMLResponse:
 
 @app.get("/healthz")
 def healthz():
+    import re as _re
+    t0 = time.monotonic()
+    host = (_re.search(r"@([^/:?]+)", settings().database_url or "") or [None, ""])[1]
+    region = (_re.search(r"\.([a-z]{2}-[a-z]+-\d)\.", host) or [None, "unknown"])[1]
     try:
-        with connect() as c:
+        with pool().connection() as c:
             c.execute("SELECT 1")
-        return {"ok": True, "db": "ok"}
+        return {"ok": True, "db": "ok", "db_region": region, "app_region": os.environ.get("VERCEL_REGION", "local"),
+                "db_ms": round(1000 * (time.monotonic() - t0))}
     except Exception as e:  # noqa: BLE001
-        return JSONResponse({"ok": False, "db": type(e).__name__}, status_code=503)
+        return JSONResponse({"ok": False, "db": type(e).__name__, "db_region": region}, status_code=503)
 
 
 @app.get("/api/cron/process")
@@ -126,19 +144,16 @@ def _drain(conn, run_id: int | None = None):
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, user: str = Depends(require_login), conn=Depends(db)):
-    one = lambda sql: conn.execute(sql).fetchone()["n"]  # noqa: E731
-    k = {"meetings": one("SELECT count(*) n FROM meetings"),
-         "emailed": one("SELECT count(*) n FROM outreach_threads WHERE gmail_thread_id IS NOT NULL"),
-         "replied": one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in' AND kind='reply'"),
-         "companies": one("SELECT count(*) n FROM companies WHERE status NOT IN ('queued','processing')"),
-         "qualified": one("SELECT count(DISTINCT company_id) n FROM verdicts WHERE verdict IN ('QUALIFIED','QUALIFIED_FLAGGED')"),
-         "reviewed": one("SELECT count(*) n FROM feedback_events"),
-         "edited": one("SELECT count(*) n FROM feedback_events WHERE action <> 'approved_as_is'")}
-    secs = conn.execute("SELECT avg(seconds) s FROM companies WHERE seconds IS NOT NULL").fetchone()["s"]
-    k["avg_secs"] = round(float(secs)) if secs else None
+    r = conn.execute(f"""SELECT {FUNNEL_SQL},
+        (SELECT count(*) FROM feedback_events) AS reviewed,
+        (SELECT count(*) FROM feedback_events WHERE action <> 'approved_as_is') AS edited,
+        (SELECT avg(seconds) FROM companies WHERE seconds IS NOT NULL) AS avg_secs""").fetchone()
+    funnel = [(label, r[key]) for key, label in FUNNEL]
+    k = {"meetings": r["meetings"], "emailed": r["emailed"], "replied": r["replied"], "companies": r["researched"],
+         "qualified": r["qualified"], "reviewed": r["reviewed"], "edited": r["edited"]}
+    k["avg_secs"] = round(float(r["avg_secs"])) if r["avg_secs"] else None
     k["reply_rate"] = round(100 * k["replied"] / k["emailed"]) if k["emailed"] else None
     k["edit_rate"] = round(100 * k["edited"] / k["reviewed"]) if k["reviewed"] else None
-    funnel = _funnel(conn)
     upcoming = conn.execute("""SELECT m.*, c.domain FROM meetings m JOIN companies c ON c.id=m.company_id
                                WHERE m.start_at > now() - interval '1 hour' ORDER BY m.start_at LIMIT 3""").fetchall()
     activity = conn.execute("""
@@ -151,17 +166,21 @@ def home(request: Request, user: str = Depends(require_login), conn=Depends(db))
     return page(request, "home.html", "home", k=k, funnel=funnel, upcoming=upcoming, activity=activity)
 
 
+FUNNEL = [("researched", "Researched"), ("qualified", "Qualified"), ("emailed", "Emailed"), ("replied", "Replied"),
+          ("interested", "Interested"), ("proposed", "Times proposed"), ("meetings", "Meetings booked")]
+FUNNEL_SQL = """
+    (SELECT count(*) FROM companies WHERE status NOT IN ('queued','processing')) AS researched,
+    (SELECT count(DISTINCT company_id) FROM verdicts WHERE verdict IN ('QUALIFIED','QUALIFIED_FLAGGED')) AS qualified,
+    (SELECT count(*) FROM outreach_threads WHERE gmail_thread_id IS NOT NULL) AS emailed,
+    (SELECT count(DISTINCT thread_id) FROM outreach_messages WHERE direction='in' AND kind='reply') AS replied,
+    (SELECT count(*) FROM outreach_threads WHERE sequence=2) AS interested,
+    (SELECT count(DISTINCT thread_id) FROM outreach_messages WHERE kind='proposal') AS proposed,
+    (SELECT count(*) FROM meetings) AS meetings"""
+
+
 def _funnel(conn) -> list[tuple[str, int]]:
-    one = lambda sql: conn.execute(sql).fetchone()["n"]  # noqa: E731
-    return [
-        ("Researched", one("SELECT count(*) n FROM companies WHERE status NOT IN ('queued','processing')")),
-        ("Qualified", one("SELECT count(DISTINCT company_id) n FROM verdicts WHERE verdict IN ('QUALIFIED','QUALIFIED_FLAGGED')")),
-        ("Emailed", one("SELECT count(*) n FROM outreach_threads WHERE gmail_thread_id IS NOT NULL")),
-        ("Replied", one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in' AND kind='reply'")),
-        ("Interested", one("SELECT count(*) n FROM outreach_threads WHERE sequence=2")),
-        ("Times proposed", one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE kind='proposal'")),
-        ("Meetings booked", one("SELECT count(*) n FROM meetings")),
-    ]
+    r = conn.execute(f"SELECT {FUNNEL_SQL}").fetchone()
+    return [(label, r[key]) for key, label in FUNNEL]
 
 
 @app.post("/check-inbox")
@@ -305,15 +324,22 @@ def pipeline(request: Request, user: str = Depends(require_login), conn=Depends(
         """SELECT t.*, c.domain, ct.first_name, ct.last_name, ct.position, cd.stage, cd.reason AS crm_reason
            FROM outreach_threads t JOIN companies c ON c.id=t.company_id LEFT JOIN drafts d ON d.id=t.draft_id
            LEFT JOIN contacts ct ON ct.id=d.contact_id LEFT JOIN crm_deals cd ON cd.thread_id=t.id ORDER BY t.id DESC""").fetchall()
+    ids = [t["id"] for t in threads]
+    def by_thread(sql):
+        out = {}
+        for row in (conn.execute(sql, (ids,)).fetchall() if ids else []):
+            out.setdefault(row["thread_id"], []).append(row)
+        return out
+    msgs = by_thread("""SELECT thread_id, direction, kind, status, subject, left(body, 600) AS body, classification, reply_intent,
+                               confidence, quote, created_at FROM outreach_messages WHERE thread_id = ANY(%s) ORDER BY id""")
+    escs = by_thread("SELECT * FROM escalations WHERE thread_id = ANY(%s) ORDER BY id")
+    mtgs = by_thread("SELECT * FROM meetings WHERE thread_id = ANY(%s) ORDER BY id DESC")
+    holds = by_thread("SELECT thread_id, start_at, status FROM slot_holds WHERE thread_id = ANY(%s) ORDER BY start_at")
     out = []
     for t in threads:
         t = dict(t)
-        t["messages"] = conn.execute("""SELECT direction, kind, status, subject, left(body, 600) AS body, classification, reply_intent,
-                                               confidence, quote, created_at FROM outreach_messages WHERE thread_id=%s ORDER BY id""",
-                                     (t["id"],)).fetchall()
-        t["escalations"] = conn.execute("SELECT * FROM escalations WHERE thread_id=%s ORDER BY id", (t["id"],)).fetchall()
-        t["meeting"] = conn.execute("SELECT * FROM meetings WHERE thread_id=%s ORDER BY id DESC LIMIT 1", (t["id"],)).fetchone()
-        t["holds"] = conn.execute("SELECT start_at, status FROM slot_holds WHERE thread_id=%s ORDER BY start_at", (t["id"],)).fetchall()
+        t["messages"], t["escalations"] = msgs.get(t["id"], []), escs.get(t["id"], [])
+        t["meeting"], t["holds"] = (mtgs.get(t["id"]) or [None])[0], holds.get(t["id"], [])
         out.append(t)
     cols = [("To reply", ("contacted",), "mail"), ("Scheduling", ("interested", "scheduling"), "calendar"),
             ("Meeting booked", ("meeting_booked",), "check-circle"), ("With you", ("handed_off",), "alert"),
@@ -343,14 +369,25 @@ def health(request: Request, user: str = Depends(require_login), conn=Depends(db
     one = lambda sql, *a: conn.execute(sql, a).fetchone()  # noqa: E731
     funnel = _funnel(conn)
     top = max(1, funnel[0][1])
-    replied = one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in'")["n"]
-    handoff = one("SELECT count(DISTINCT thread_id) n FROM escalations")["n"]
-    t2b = one("""SELECT avg(m.created_at - e.created_at) d FROM meetings m JOIN outreach_threads t ON t.id=m.thread_id
-                 JOIN LATERAL (SELECT created_at FROM events WHERE step='crm' AND (data->>'thread_id')::int=t.id
-                               AND message LIKE 'stage → interested%%' ORDER BY id LIMIT 1) e ON true""")["d"]
-    rounds = one("""SELECT avg(n) a FROM (SELECT count(*) n FROM outreach_messages WHERE kind='proposal' GROUP BY thread_id) x""")["a"]
-    costs = one("""SELECT avg(cost_usd) c, avg(seconds) s, sum(cost_usd) total, count(*) n FROM companies WHERE seconds IS NOT NULL""")
-    worth = one("SELECT count(*) FILTER (WHERE worth_30_min) y, count(worth_30_min) n FROM meetings")
+    r = one("""SELECT
+        (SELECT count(DISTINCT thread_id) FROM outreach_messages WHERE direction='in') AS replied,
+        (SELECT count(DISTINCT thread_id) FROM escalations) AS handoff,
+        (SELECT avg(m.created_at - e.created_at) FROM meetings m JOIN outreach_threads t ON t.id=m.thread_id
+           JOIN LATERAL (SELECT created_at FROM events WHERE step='crm' AND (data->>'thread_id')::int=t.id
+                         AND message LIKE 'stage → interested%%' ORDER BY id LIMIT 1) e ON true) AS t2b,
+        (SELECT avg(n) FROM (SELECT count(*) n FROM outreach_messages WHERE kind='proposal' GROUP BY thread_id) x) AS rounds,
+        (SELECT avg(cost_usd) FROM companies WHERE seconds IS NOT NULL) AS c,
+        (SELECT avg(seconds) FROM companies WHERE seconds IS NOT NULL) AS s,
+        (SELECT sum(cost_usd) FROM companies WHERE seconds IS NOT NULL) AS total,
+        (SELECT count(*) FILTER (WHERE worth_30_min) FROM meetings) AS worth_y,
+        (SELECT count(worth_30_min) FROM meetings) AS worth_n,
+        (SELECT count(*) FROM feedback_events) AS fe_n,
+        (SELECT count(*) FROM feedback_events WHERE action <> 'approved_as_is') AS fe_e,
+        (SELECT count(*) FROM feedback_events WHERE action='rejected') AS fe_r""")
+    replied, handoff, t2b, rounds = r["replied"], r["handoff"], r["t2b"], r["rounds"]
+    costs = {"c": r["c"], "s": r["s"], "total": r["total"]}
+    worth = {"y": r["worth_y"], "n": r["worth_n"]}
+    edit = {"n": r["fe_n"], "e": r["fe_e"], "r": r["fe_r"]}
     segs = conn.execute("""SELECT DISTINCT ON (user_id, role_bucket, size_bucket) user_id, role_bucket, size_bucket, n, avg_edit_depth,
                                   edit_rate, rejection_rate, disagreement, created_at FROM loop_metrics
                            ORDER BY user_id, role_bucket, size_bucket, id DESC""").fetchall()
@@ -365,7 +402,6 @@ def health(request: Request, user: str = Depends(require_login), conn=Depends(db
         mins = int(td.total_seconds() // 60)
         d, h, m = mins // 1440, (mins % 1440) // 60, mins % 60
         return " ".join(x for x in (f"{d} d" if d else "", f"{h} h" if h else "", f"{m} min") if x)
-    edit = one("SELECT count(*) n, count(*) FILTER (WHERE action <> 'approved_as_is') e, count(*) FILTER (WHERE action='rejected') r FROM feedback_events")
     kill = {"edit_rate": (edit["e"] / edit["n"]) if edit["n"] else None,
             "rewrite_rate": (edit["r"] / edit["n"]) if edit["n"] else None, "n_reviews": edit["n"]}
     return page(request, "health.html", "health", funnel=funnel, top=top, kill=kill,
