@@ -141,7 +141,7 @@ def process(domain: str, llm: LLM, fetcher: Fetcher, conn, run_id: int, dry_run:
     if pkg.draft is None:
         return done("needs_human_draft", "; ".join(pkg.lint.problems)[:200])
     contact_id = conn.execute("SELECT id FROM contacts WHERE company_id=%s AND rank=1", (company_id,)).fetchone()
-    status = "needs_human_edit" if not pkg.lint.ok else ("pending_review" if (review_on or dry_run) else "approved")
+    status = "needs_human_edit" if not pkg.lint.ok else ("pending_review" if review_on else "dry_run" if dry_run else "approved")
     draft_id = conn.execute(
         """INSERT INTO drafts (company_id, contact_id, user_id, status, subject, body, hook_quote, capability_id, pain_points,
                                lint, full_prompt, role_bucket, size_bucket, hook_type, injected_learning_ids, injected_block)

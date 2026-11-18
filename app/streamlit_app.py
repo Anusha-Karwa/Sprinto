@@ -77,7 +77,7 @@ if page == "Review Queue":
     drafts = conn.execute(
         """SELECT d.*, c.domain, ct.first_name, ct.last_name, ct.position FROM drafts d
            JOIN companies c ON c.id = d.company_id LEFT JOIN contacts ct ON ct.id = d.contact_id
-           WHERE d.status IN ('pending_review','needs_human_edit') AND (d.user_id=%s OR d.user_id IS NULL)
+           WHERE d.status IN ('pending_review','needs_human_edit') AND d.user_id=%s
            ORDER BY d.id""", (user,)).fetchall()
     if not drafts:
         st.info("Nothing to review. Run `REVIEW_MODE=on python run.py domains.csv` to fill the queue.")

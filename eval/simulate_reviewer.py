@@ -84,6 +84,8 @@ def reset(url: str) -> None:
 
 
 def run_arm(conn, llm, emb, user: str, apply_on: bool, n: int) -> list[float]:
+    from feedback.review import ensure_user
+    ensure_user(conn, user)
     depths = []
     for i in range(n):
         name, line = COMPANIES[i % len(COMPANIES)]
@@ -124,7 +126,8 @@ def run_arm(conn, llm, emb, user: str, apply_on: bool, n: int) -> list[float]:
 
 def main() -> int:
     n = int(sys.argv[sys.argv.index("--n") + 1]) if "--n" in sys.argv else 15
-    url = os.environ.get("TEST_DATABASE_URL") or settings().test_database_url
+    # its own database: pytest resets the test DB, which must never happen mid-simulation
+    url = os.environ.get("EVAL_DATABASE_URL", "postgresql://sprinto:sprinto@localhost:5432/sprinto_eval")
     reset(url)
     conn = connect(url)
     llm, emb = LLM(), GeminiEmbedder()
