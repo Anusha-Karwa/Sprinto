@@ -175,6 +175,6 @@ pytest
 | A | 5 find_poc + ranking | ✅ |
 | A | 6 Pain points, draft, lint, send → **email in inbox** | ✅ |
 | B | 7–8 Review app + feedback loop | ⏳ |
-| C | 9 Sequence 1 | ⏳ |
+| C | 9 Sequence 1 (reply reading + 3-way branch + OOO/unsubscribe/escalate) | ✅ (live reply test pending) |
 | D | 10 Sequence 2 (LangGraph) | ⏳ |
 | E | 11 Observability | ⏳ |

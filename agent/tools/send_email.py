@@ -27,6 +27,8 @@ class SendEmailInput(BaseModel):
     subject: str
     body: str
     thread_id: str | None = None
+    rfc_message_id: str | None = None      # pre-generated Message-ID: the caller records it BEFORE sending (idempotency)
+    in_reply_to: str | None = None         # Message-ID of the message we reply to (keeps the thread in mail clients)
     # NOTE: deliberately NO recipient field. The recipient is always settings().my_email (safety guard 1).
 
 
@@ -38,13 +40,17 @@ class SendEmailOutput(BaseModel):
     error_class: str | None = None
 
 
-def build_message(subject: str, body: str, thread_headers: dict | None = None) -> tuple[dict, str]:
+def new_message_id() -> str:
+    return make_msgid(domain=(settings().bot_email or "bot.local").split("@")[-1])
+
+
+def build_message(subject: str, body: str, thread_headers: dict | None = None, rfc_message_id: str | None = None) -> tuple[dict, str]:
     to = only_my_email()
     msg = MIMEText(body, "plain", "utf-8")
     msg["To"] = to
     msg["From"] = settings().bot_email or "me"
     msg["Subject"] = subject
-    rfc_id = make_msgid(domain=(settings().bot_email or "bot.local").split("@")[-1])
+    rfc_id = rfc_message_id or new_message_id()
     msg["Message-ID"] = rfc_id
     for k, v in (thread_headers or {}).items():
         msg[k] = v
@@ -52,9 +58,11 @@ def build_message(subject: str, body: str, thread_headers: dict | None = None) -
     return {"raw": base64.urlsafe_b64encode(msg.as_bytes()).decode()}, rfc_id
 
 
-def send_email(kind: str, subject: str, body: str, thread_id: str | None = None, *, service=None) -> SendEmailOutput:
+def send_email(kind: str, subject: str, body: str, thread_id: str | None = None, rfc_message_id: str | None = None,
+               in_reply_to: str | None = None, *, service=None) -> SendEmailOutput:
     from googleapiclient.errors import HttpError
-    payload, rfc_id = build_message(subject, body)
+    headers = {"In-Reply-To": in_reply_to, "References": in_reply_to} if in_reply_to else None
+    payload, rfc_id = build_message(subject, body, headers, rfc_message_id)
     if thread_id:
         payload["threadId"] = thread_id
     try:

@@ -76,6 +76,17 @@ def cron_process(request: Request, conn=Depends(db)):
     return {"processed": [(r.domain, r.status) for r in rows]}
 
 
+@app.get("/api/cron/worker")
+def cron_worker(request: Request, conn=Depends(db)):
+    """Sequence 1 worker pass (read replies, branch, close expired threads). Called every ~5 min by the schedule."""
+    secret = os.environ.get("CRON_SECRET", "")
+    if not secret or request.headers.get("authorization") != f"Bearer {secret}":
+        raise HTTPException(401, "bad cron secret")
+    from outreach.worker import run_once
+    rep = run_once(conn)
+    return {k: (len(v) if isinstance(v, list) else v) for k, v in rep.items()}
+
+
 def _drain(conn, run_id: int | None = None):
     from agent.llm import LLM
     from pipeline.scraper import Fetcher

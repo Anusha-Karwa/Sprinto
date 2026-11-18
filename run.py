@@ -24,6 +24,7 @@ from agent.tools.runner import run_tool
 from agent.tools.send_email import TOOL as SEND_EMAIL
 from pipeline.contacts import find_contacts, hunter_credits
 from feedback.retrieve_apply import build_injection
+from outreach.sequence1 import send_cold
 from feedback.review import ensure_user
 from pipeline.personalise import hook_type, write_email
 from pipeline.qualify import qualify
@@ -163,7 +164,7 @@ def process(domain: str, llm: LLM, fetcher: Fetcher, conn, run_id: int, dry_run:
     if dry_run:
         con.print(f"\n{subject}\n{body}\n", markup=False, highlight=False)
         return done("dry_run")
-    out = run_tool(SEND_EMAIL, {"kind": "cold", "subject": subject, "body": body}, **kw)
+    out = send_cold(conn, draft_id=draft_id, company_id=company_id, subject=subject, body=body, log_kw=kw)
     if not out.ok:
         return done("send_failed", f"{out.error_class}: {out.error_detail}"[:200])
     conn.execute("UPDATE drafts SET status='sent', sent_subject=%s, sent_body=%s WHERE id=%s",

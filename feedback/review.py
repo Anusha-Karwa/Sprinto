@@ -45,8 +45,9 @@ def review_action(conn, llm, embedder, *, draft_id: int, user_id: str, action: s
         wrapped = f"[TEST → {d['first_name']} {d['last_name'] or ''}, {d['position']} @ {d['domain']}] {subject}".replace("  ", " ")
         footer = (f"\n\n---\nReviewed by {user_id}: {action}. Intended recipient: {d['first_name']} <{d['poc_email']}>. "
                   f"Sent to MY_EMAIL instead.")
-        res = run_tool(send_tool, {"kind": "cold", "subject": wrapped, "body": body + footer}, conn=conn,
-                       company_id=d["company_id"])
+        from outreach.sequence1 import send_cold      # approve → Sequence 1 starts tracking replies
+        res = send_cold(conn, draft_id=draft_id, company_id=d["company_id"], subject=wrapped, body=body + footer,
+                        send_tool=send_tool)
         if not res.ok:
             out["error"] = f"send failed: {res.error_class} → {res.action}"
             return out
