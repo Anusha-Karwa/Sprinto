@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} · Sprinto Outbound</title>
+<style>
+  :root { --bg:#f7f7f8; --card:#fff; --ink:#1d1d1f; --muted:#6b6b72; --line:#e4e4e8; --accent:#4b3df5; --ok:#147a3d; --warn:#9a6200; --bad:#b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141416; --card:#1d1d21; --ink:#ececf0; --muted:#a0a0aa; --line:#2e2e35; --accent:#8b82ff; --ok:#4cc27e; --warn:#e3a33b; --bad:#ff6b5e; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:12px 20px; display:flex; gap:20px; align-items:center; flex-wrap:wrap; }
+  header b { font-size:16px; } header a { color:var(--muted); text-decoration:none; } header a.on, header a:hover { color:var(--accent); }
+  main { max-width:1200px; margin:0 auto; padding:20px 16px 60px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:14px 0; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:20px; } @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .muted { color:var(--muted); } .small { font-size:13px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; border:1px solid var(--line); }
+  .QUALIFIED,.sent,.ok { color:var(--ok); } .QUALIFIED_FLAGGED,.pending_review,.needs_manual_poc,.needs_human_edit,.queued,.processing { color:var(--warn); }
+  .DISQUALIFIED,.FAILED,.send_failed { color:var(--bad); }
+  input[type=text], input[type=password], textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); font:inherit; }
+  textarea { min-height: 260px; }
+  button { padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); font:inherit; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-size:14px; } th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .kpis { display:flex; gap:12px; flex-wrap:wrap; } .kpi { flex:1 1 150px; } .kpi .n { font-size:28px; font-weight:650; }
+  .flash { padding:10px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); margin:10px 0; }
+  .scroll { overflow-x:auto; }
+  label.chip { display:inline-block; margin:2px 6px 2px 0; font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <b>Sprinto Outbound</b>
+  <a href="/" class="{{ 'on' if nav=='home' }}">Overview</a>
+  <a href="/runs" class="{{ 'on' if nav=='runs' }}">Runs</a>
+  <a href="/review" class="{{ 'on' if nav=='review' }}">Review queue</a>
+  <a href="/questions" class="{{ 'on' if nav=='questions' }}">Questions for you</a>
+  <span class="muted small" style="margin-left:auto">emails only ever go to {{ my_email }}</span>
+</header>
+<main>
+{% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

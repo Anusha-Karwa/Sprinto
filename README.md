@@ -151,6 +151,19 @@ python -m agent.db            # apply migrations
 pytest
 ```
 
+## Deploying (Vercel + Neon)
+
+- **Database: Neon** (Postgres + pgvector). Put its connection string in `DATABASE_URL`. Tables are created
+  automatically on the first request (migrations are idempotent).
+- **App: Vercel.** Entry point `server.py` → FastAPI app in `web/`. Runtime packages: `requirements.txt`
+  (local/dev extras: `requirements-dev.txt`). Every page asks for `APP_PASSWORD`.
+- **Serverless design.** A run *queues* companies; each call processes companies for ≤ `PROCESS_BUDGET_SECONDS`
+  and never starts one after that, so calls end before Vercel's 300 s limit. A schedule calls
+  `/api/cron/process` (header `Authorization: Bearer $CRON_SECRET`) to drain the queue.
+- **Differences from local:** no headless browser on Vercel (JS-only pages are labelled `empty_after_render`);
+  `/tmp` is wiped between calls, so the Hunter cache also lives in Postgres (a credit is never spent twice);
+  Gmail access comes from the `GOOGLE_TOKEN_JSON` env var instead of `token.json`.
+
 ## Build status
 
 | Phase | Step | Status |

@@ -17,7 +17,10 @@ from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = ROOT / "config"
-DATA_DIR = ROOT / "data"
+# On Vercel the code folder is read-only; only /tmp is writable (and wiped between cold starts),
+# so anything that must persist (Hunter results, facts, drafts) lives in Postgres, not here.
+ON_VERCEL = bool(os.environ.get("VERCEL"))
+DATA_DIR = Path(os.environ.get("SPRINTO_DATA_DIR") or ("/tmp/sprinto-data" if ON_VERCEL else ROOT / "data"))
 
 load_dotenv(ROOT / ".env")
 

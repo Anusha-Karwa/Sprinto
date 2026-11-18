@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block body %}
+<h1>{{ 'Sent' if res.sent else 'Recorded' }}</h1>
+<div class="card">
+<p><b>{{ res.signal.action }}</b> · edit depth {{ '%.2f'|format(res.signal.edit_depth) }} · {{ res.learning_ids|length }} learning(s) stored</p>
+<ul>{% for c in res.captured %}<li><b>{{ c.component }}</b> ({{ c.tag }}): {{ c.learning }} <span class="muted small">confidence {{ '%.2f'|format(c.confidence) }}</span></li>{% endfor %}</ul>
+{% if res.question %}<p class="QUALIFIED_FLAGGED"><b>Question for you:</b> {{ res.question }} → <a href="/questions">answer it</a></p>{% endif %}
+</div>
+<p><a href="/review">← back to the queue</a></p>
+{% endblock %}

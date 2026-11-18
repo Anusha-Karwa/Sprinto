@@ -1,0 +1,49 @@
+Apply ON
+  [ON ] draft  1: edit depth 0.938 · 0 learnings injected · 5 learned
+  [ON ] draft  2: edit depth 0.035 · 5 learnings injected · 1 learned
+  [ON ] draft  3: edit depth 0.000 · 5 learnings injected · 0 learned
+  [ON ] draft  4: edit depth 0.733 · 5 learnings injected · 4 learned
+  [ON ] draft  5: edit depth 0.721 · 5 learnings injected · 4 learned
+  [ON ] draft  6: edit depth 0.036 · 5 learnings injected · 1 learned
+  [ON ] draft  7: edit depth 0.554 · 5 learnings injected · 5 learned
+  [ON ] draft  8: edit depth 0.217 · 5 learnings injected · 2 learned
+  [ON ] draft  9: edit depth 0.704 · 5 learnings injected · 4 learned
+  [ON ] draft 10: edit depth 0.183 · 5 learnings injected · 3 learned
+  [ON ] draft 11: edit depth 0.320 · 5 learnings injected · 2 learned
+  [ON ] draft 12: edit depth 0.180 · 5 learnings injected · 3 learned
+  [ON ] draft 13: edit depth 0.315 · 5 learnings injected · 4 learned
+  [ON ] draft 14: edit depth 0.028 · 5 learnings injected · 2 learned
+  [ON ] draft 15: edit depth 0.510 · 5 learnings injected · 4 learned
+Apply OFF (control)
+  [OFF] draft  1: edit depth 0.938 · 0 learnings injected · 5 learned
+  [OFF] draft  2: edit depth 0.902 · 0 learnings injected · 5 learned
+  [OFF] draft  3: edit depth 0.829 · 0 learnings injected · 5 learned
+  [OFF] draft  4: edit depth 0.798 · 0 learnings injected · 6 learned
+  [OFF] draft  5: edit depth 0.885 · 0 learnings injected · 5 learned
+  [OFF] draft  6: edit depth 0.862 · 0 learnings injected · 6 learned
+  [OFF] draft  7: edit depth 0.883 · 0 learnings injected · 5 learned
+  [OFF] draft  8: edit depth 0.799 · 0 learnings injected · 5 learned
+  [OFF] draft  9: edit depth 0.829 · 0 learnings injected · 4 learned
+  [OFF] draft 10: edit depth 0.948 · 0 learnings injected · 5 learned
+  [OFF] draft 11: edit depth 0.775 · 0 learnings injected · 6 learned
+  [OFF] draft 12: edit depth 0.969 · 0 learnings injected · 4 learned
+  [OFF] draft 13: edit depth 0.975 · 0 learnings injected · 6 learned
+  [OFF] draft 14: edit depth 0.929 · 0 learnings injected · 4 learned
+  [OFF] draft 15: edit depth 0.875 · 0 learnings injected · 2 learned
+
+                 drafts 1–5   drafts 11–15
+Apply ON             0.485        0.271
+Apply OFF            0.870        0.904
+
+PASS: edit depth fell with Apply on
+LLM cost: $0.0875 over 249 calls
+
+Top learnings (Apply ON arm):
+  (2×) Mention the specific target framework in the subject line rather than a generic term like compliance automation.
+  (1×) Keep subject lines lowercase and free of company names to mimic internal emails. (reviewer: personal style rule)
+  (1×) When a company holds one certificate, pitch the next logical framework rather than dwelling on current pain. (reviewer: personal style rule)
+  (1×) Place engineering time-loss pain points right after introducing the next framework. (reviewer: personal style rule)
+  (1×) Use short, punchy sentences for product capabilities instead of listing multiple frameworks. (reviewer: personal style rule)
+  (1×) Use 'Cheers,' followed by just the first name on a new line for a casual sign-off. (reviewer: personal style rule)
+  (1×) Keep email subjects concise by focusing on the single primary framework being pitched. (reviewer: personal style rule)
+  (1×) Keep hook sentences brief and conversational without overloading audit frequency details. (reviewer: personal style rule)

@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block body %}
+<h1>Runs</h1>
+{% for r in runs %}
+<div class="card">
+  <b><a href="/runs/{{ r.id }}">Run {{ r.id }}</a></b> · {{ r.started_at.strftime('%d %b %H:%M') }} · {{ r.n }} companies ·
+  {{ r.queued }} still queued · {{ r.sent }} sent {% if r.finished_at %}<span class="pill ok">finished</span>{% endif %}
+</div>
+{% else %}<p class="muted">No runs yet.</p>{% endfor %}
+{% endblock %}

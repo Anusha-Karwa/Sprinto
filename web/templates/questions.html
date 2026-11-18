@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block body %}
+<h1>Questions for you</h1>
+<p class="muted">The loop never guesses why a fact was corrected, or when it's unsure. These learnings wait for your answer.</p>
+{% for q in qs %}
+<div class="card"><p><b>#{{ q.id }}</b> {{ q.ask_why }}</p>
+<details><summary class="small">What you changed</summary><pre style="white-space:pre-wrap;font:inherit" class="small">DRAFT:
+{{ q.situation.draft.body if q.situation.draft else '' }}
+
+SENT:
+{{ q.situation.sent.body if q.situation.sent else '' }}</pre></details>
+<form method="post" action="/questions/{{ q.id }}"><input type="text" name="answer" placeholder="Your answer"><p><button class="primary">Save answer</button></p></form></div>
+{% else %}<p class="muted">No open questions.</p>{% endfor %}
+{% endblock %}

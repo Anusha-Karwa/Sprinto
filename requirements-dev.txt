@@ -1,0 +1,11 @@
+# Everything for local development, tests and the CLI (includes the runtime list).
+-r requirements.txt
+playwright>=1.50          # JS-shell fallback (local only; Vercel can't run a browser)
+anthropic>=2.0            # optional, behind LLM_PROVIDER=anthropic
+pgvector>=0.3
+langgraph>=1.2
+langgraph-checkpoint-postgres>=3.2
+streamlit>=1.40           # local review screen (the Vercel app is web/)
+pytest>=8.0
+freezegun>=1.5
+httpx>=0.27               # FastAPI TestClient

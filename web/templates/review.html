@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block body %}
+<h1>Review queue <span class="muted small">reviewer: {{ user }}</span></h1>
+{% for d in drafts %}
+<div class="card">
+  <h3>{{ d.first_name }} {{ d.last_name or '' }} · {{ d.position }} @ <a href="/companies/{{ d.company_id }}">{{ d.domain }}</a> <span class="muted small">(draft #{{ d.id }})</span></h3>
+  <div class="grid">
+    <div>
+      {% if d.v %}<p><b>{{ d.v.verdict }} · {{ d.v.score }}/100</b></p><ul class="small">{% for r in d.v.reasons[:6] %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+      {% if d.rank_reason %}<p class="small"><b>Why this person:</b> {{ d.rank_reason }}</p>{% endif %}
+      <p class="small"><b>Pain points</b></p><ul class="small">{% for p in d.pain_points or [] %}<li>{{ p.pain }}<br><span class="muted">evidence: “{{ p.evidence_quote }}”</span></li>{% endfor %}</ul>
+      <p class="small"><b>Hook</b> ({{ d.hook_type }}): “{{ d.hook_quote }}” · <b>Capability:</b> {{ d.capability_id }}</p>
+      {% if d.learnings %}<p class="small"><b>{{ d.learnings|length }} learning(s) from your past edits were used:</b></p><ul class="small">{% for l in d.learnings %}<li>{{ l.learning }}</li>{% endfor %}</ul>
+      {% else %}<p class="small muted">No learnings injected yet for this segment.</p>{% endif %}
+      {% if d.lint and not d.lint.ok %}<p class="small FAILED">Lint: {{ d.lint.problems|join('; ') }}</p>{% endif %}
+    </div>
+    <form method="post" action="/review/{{ d.id }}">
+      <input type="hidden" name="shown_at" value="{{ now }}">
+      <p class="small muted">Subject</p><input type="text" name="subject" value="{{ d.subject }}">
+      <p class="small muted">Body</p><textarea name="body">{{ d.body }}</textarea>
+      <p class="small muted">Reason (optional for edits, required to reject)</p>
+      {% for chip in chips %}<label class="chip"><input type="checkbox" name="chips" value="{{ chip }}"> {{ chip }}</label>{% endfor %}
+      <input type="text" name="reason" placeholder="Why? (free text)" style="margin-top:6px">
+      <p style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="primary" name="action" value="approve">Approve as-is</button>
+        <button name="action" value="edit">Approve with edits</button>
+        <button name="action" value="reject">Reject (rewrite)</button>
+      </p>
+    </form>
+  </div>
+</div>
+{% else %}<p class="muted">Nothing to review. Queue companies with review mode on to fill this.</p>{% endfor %}
+{% endblock %}

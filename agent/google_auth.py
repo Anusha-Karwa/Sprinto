@@ -30,17 +30,24 @@ def _paths() -> tuple[Path, Path]:
 
 
 def credentials():
-    """Load + refresh saved credentials. Raises a clear error if setup hasn't been done."""
+    """Load + refresh credentials. Local: token.json. Vercel: GOOGLE_TOKEN_JSON env var (the same JSON).
+    Raises a clear error if setup hasn't been done."""
+    import json
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     _, token = _paths()
-    if not token.exists():
+    env_token = os.environ.get("GOOGLE_TOKEN_JSON")
+    if env_token:
+        creds = Credentials.from_authorized_user_info(json.loads(env_token), SCOPES)
+    elif token.exists():
+        creds = Credentials.from_authorized_user_file(str(token), SCOPES)
+    else:
         raise RuntimeError("Google is not connected yet: run `python -m agent.google_auth` (see README).")
-    creds = Credentials.from_authorized_user_file(str(token), SCOPES)
     if not creds.valid:
         if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            token.write_text(creds.to_json())
+            creds.refresh(Request())          # in memory on Vercel; saved back to token.json locally
+            if not env_token:
+                token.write_text(creds.to_json())
         else:
             raise RuntimeError("Google token is invalid — run `python -m agent.google_auth` again.")
     return creds

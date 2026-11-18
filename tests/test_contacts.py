@@ -79,6 +79,8 @@ class HunterFake:
 def env(tmp_path, monkeypatch):
     monkeypatch.setattr(fp, "DATA_DIR", tmp_path)
     monkeypatch.setattr(fp, "poc_overrides", lambda: {})
+    monkeypatch.setattr(fp, "_db_cache_get", lambda d: None)
+    monkeypatch.setattr(fp, "_db_cache_put", lambda d, data: None)
     monkeypatch.setenv("HUNTER_API_KEY", "test")
     from agent import config
     config.settings.cache_clear()

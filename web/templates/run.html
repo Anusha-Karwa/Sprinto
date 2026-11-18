@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block body %}
+<h1>Run {{ run.id }}</h1>
+<p class="muted">{{ done }} of {{ rows|length }} companies processed · average {{ avg }}s per company · LLM cost ${{ '%.4f'|format(cost) }}</p>
+{% if queued %}
+<form method="post" action="/runs/{{ run.id }}/process"><button class="primary">Process the next companies ({{ queued }} queued)</button>
+<span class="small muted">Each click runs for up to ~4 minutes; the background schedule also picks them up.</span></form>
+{% endif %}
+<div class="card scroll"><table>
+<tr><th>Company</th><th>Status</th><th>Score</th><th>Person</th><th>Sent</th><th>Flags</th><th>Cost</th><th>Seconds</th><th>Note</th></tr>
+{% for r in rows %}
+<tr><td><a href="/companies/{{ r.company_id }}">{{ r.domain }}</a></td><td class="{{ r.status }}">{{ r.status }}</td><td>{{ r.score if r.score is not none else '–' }}</td>
+<td>{{ r.poc or '–' }}</td><td>{{ r.sent }}</td><td class="small">{{ r.flags|join(', ') or '–' }}</td><td>${{ '%.4f'|format(r.cost) }}</td>
+<td>{{ r.seconds }}</td><td class="small">{{ r.note }}</td></tr>
+{% endfor %}
+</table></div>
+{% endblock %}

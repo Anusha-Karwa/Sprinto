@@ -12,7 +12,7 @@ import csv
 import sys
 import time
 import traceback
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from rich.console import Console
@@ -92,12 +92,14 @@ def pipeline_notes(domain, q, poc, pkg, row: Row) -> str:
     return "\n".join(lines)
 
 
-def process(domain: str, llm: LLM, fetcher: Fetcher, conn, run_id: int, dry_run: bool) -> Row:
+def process(domain: str, llm: LLM, fetcher: Fetcher, conn, run_id: int, dry_run: bool, company_id: int | None = None) -> Row:
     row = Row(domain=domain)
     t0 = time.monotonic()
     u0 = (llm.usage.tokens_in, llm.usage.tokens_out)
     f0 = dict(fetcher.stats)
-    company_id = conn.execute("INSERT INTO companies (run_id, domain) VALUES (%s,%s) RETURNING id", (run_id, domain)).fetchone()["id"]
+    if company_id is None:
+        company_id = conn.execute("INSERT INTO companies (run_id, domain, dry_run) VALUES (%s,%s,%s) RETURNING id",
+                                  (run_id, domain, dry_run)).fetchone()["id"]
     kw = {"conn": conn, "run_id": run_id, "company_id": company_id}
 
     def done(status, note=""):
@@ -109,9 +111,9 @@ def process(domain: str, llm: LLM, fetcher: Fetcher, conn, run_id: int, dry_run:
         row.fetches_requests = fetcher.stats["requests"] - f0["requests"]
         row.fetches_browser = fetcher.stats["browser"] - f0["browser"]
         conn.execute("""UPDATE companies SET status=%s, failure=%s, seconds=%s, tokens_in=%s, tokens_out=%s, cost_usd=%s,
-                        fetches_requests=%s, fetches_browser=%s WHERE id=%s""",
+                        fetches_requests=%s, fetches_browser=%s, row_data=%s WHERE id=%s""",
                      (status, note or None, row.seconds, row.tokens_in, row.tokens_out, row.cost, row.fetches_requests,
-                      row.fetches_browser, company_id))
+                      row.fetches_browser, Jsonb(asdict(row)), company_id))
         return row
 
     q = qualify(domain, llm, fetcher, **kw)
@@ -198,6 +200,65 @@ def write_report(rows: list[Row], run_id: int, total_s: float, total_cost: float
     return md
 
 
+# ---------------- queue (works the same from the CLI and from short Vercel calls) ----------------
+
+def start_run(conn, domains: list[str], source: str, dry_run: bool = False) -> int:
+    """Create a run and queue one company row per domain. Nothing is processed here."""
+    s = settings()
+    run_id = conn.execute("INSERT INTO runs (input_file, review_mode, config_snapshot) VALUES (%s,%s,%s) RETURNING id",
+                          (source, s.review_mode, Jsonb({"icp": icp(), "dry_run": dry_run}))).fetchone()["id"]
+    for d in domains:
+        conn.execute("INSERT INTO companies (run_id, domain, status, dry_run) VALUES (%s,%s,'queued',%s)", (run_id, d, dry_run))
+    return run_id
+
+
+STALE_MINUTES = 15   # a company stuck in 'processing' this long was cut off (e.g. a function timeout) → requeue
+
+
+def claim_next(conn, run_id: int | None = None) -> dict | None:
+    conn.execute("""UPDATE companies SET status='queued', processing_started_at=NULL
+                    WHERE status='processing' AND processing_started_at < now() - %s * interval '1 minute'""", (STALE_MINUTES,))
+    return conn.execute(
+        """UPDATE companies SET status='processing', processing_started_at=now()
+           WHERE id = (SELECT id FROM companies WHERE status='queued' AND (%s::bigint IS NULL OR run_id=%s)
+                       ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1)
+           RETURNING id, domain, run_id, dry_run""", (run_id, run_id)).fetchone()
+
+
+def drain(conn, llm: LLM, fetcher: Fetcher, *, budget_seconds: float | None = None, run_id: int | None = None,
+          on_row=None) -> list[Row]:
+    """Process queued companies until none are left or the time budget is used.
+    A company is never STARTED after the budget is spent, so a Vercel call ends before its hard limit."""
+    rows, t0 = [], time.monotonic()
+    while budget_seconds is None or time.monotonic() - t0 < budget_seconds:
+        job = claim_next(conn, run_id)
+        if not job:
+            break
+        try:
+            row = process(job["domain"], llm, fetcher, conn, job["run_id"], job["dry_run"], company_id=job["id"])
+        except Exception as e:  # noqa: BLE001 — one company failing never stops the run; the reason is recorded
+            row = Row(domain=job["domain"], status="FAILED", note=f"unexpected {type(e).__name__}: {e}"[:200])
+            conn.execute("UPDATE companies SET status='FAILED', failure=%s, row_data=%s WHERE id=%s",
+                         (row.note, Jsonb(asdict(row)), job["id"]))
+            conn.execute("INSERT INTO events (run_id, company_id, step, level, message, data) VALUES (%s,%s,'run','error',%s,%s)",
+                         (job["run_id"], job["id"], f"{job['domain']}: {e}", Jsonb({"traceback": traceback.format_exc()[-2000:]})))
+        rows.append(row)
+        if on_row:
+            on_row(row)
+        left = conn.execute("SELECT count(*) n FROM companies WHERE run_id=%s AND status IN ('queued','processing')",
+                            (job["run_id"],)).fetchone()["n"]
+        if not left:
+            conn.execute("UPDATE runs SET finished_at=now() WHERE id=%s AND finished_at IS NULL", (job["run_id"],))
+    return rows
+
+
+def report_rows(conn, run_id: int) -> list[Row]:
+    out = []
+    for r in conn.execute("SELECT domain, status, row_data FROM companies WHERE run_id=%s ORDER BY id", (run_id,)).fetchall():
+        out.append(Row(**r["row_data"]) if r["row_data"] else Row(domain=r["domain"], status=r["status"]))
+    return out
+
+
 def main(argv: list[str]) -> int:
     args = [a for a in argv if not a.startswith("--")]
     if not args:
@@ -210,26 +271,20 @@ def main(argv: list[str]) -> int:
     migrate(verbose=False)
     conn = connect()
     domains = read_domains(args[0])
-    run_id = conn.execute("INSERT INTO runs (input_file, review_mode, config_snapshot) VALUES (%s,%s,%s) RETURNING id",
-                          (args[0], s.review_mode, Jsonb({"icp": icp(), "dry_run": dry_run}))).fetchone()["id"]
+    run_id = start_run(conn, domains, args[0], dry_run)
     con.print(f"Run {run_id}: {len(domains)} domains · REVIEW_MODE={s.review_mode} · dry_run={dry_run} · "
               f"Hunter searches left: {hunter_credits()}")
     llm, fetcher = LLM(), Fetcher(refresh=refresh)
-    rows: list[Row] = []
     t0 = time.monotonic()
-    for d in domains:
-        con.rule(d)
-        try:
-            row = process(d, llm, fetcher, conn, run_id, dry_run)
-        except Exception as e:  # noqa: BLE001 — one company failing never stops the run; the reason is recorded
-            row = Row(domain=d, status="FAILED", note=f"unexpected {type(e).__name__}: {e}"[:200])
-            conn.execute("INSERT INTO events (run_id, step, level, message, data) VALUES (%s,'run','error',%s,%s)",
-                         (run_id, f"{d}: {e}", Jsonb({"traceback": traceback.format_exc()[-2000:]})))
-        rows.append(row)
+
+    def show(row: Row):
+        con.rule(row.domain)
         con.print(f"→ {row.status} · score {row.score} · {row.poc or '-'} · sent {row.sent} · {row.seconds}s · ${row.cost:.4f}"
                   + (f"\n  {row.note}" if row.note else ""), markup=False)
+
+    drain(conn, llm, fetcher, run_id=run_id, on_row=show)
     total = time.monotonic() - t0
-    conn.execute("UPDATE runs SET finished_at=now() WHERE id=%s", (run_id,))
+    rows = report_rows(conn, run_id)
     path = write_report(rows, run_id, total, llm.usage.cost_usd)
     con.rule("summary")
     con.print(f"{len(rows)} companies · avg {total / max(1, len(rows)):.0f}s/company · LLM cost ${llm.usage.cost_usd:.4f} · "

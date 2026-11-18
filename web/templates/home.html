@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block body %}
+<h1>Overview</h1>
+<div class="kpis">
+  <div class="card kpi"><div class="muted small">Meetings booked (headline)</div><div class="n">{{ k.meetings }}</div></div>
+  <div class="card kpi"><div class="muted small">Replies</div><div class="n">{{ k.replies }}</div></div>
+  <div class="card kpi"><div class="muted small">Emails sent</div><div class="n">{{ k.sent }}</div></div>
+  <div class="card kpi"><div class="muted small">Qualified / researched</div><div class="n">{{ k.qualified }} / {{ k.companies }}</div></div>
+  <div class="card kpi"><div class="muted small">Waiting for review</div><div class="n">{{ k.pending }}</div></div>
+</div>
+<p class="muted small">Emails sent is activity, not outcome. The number that matters is meetings booked.</p>
+<div class="card">
+  <h3>Start a run</h3>
+  <form method="post" action="/runs">
+    <p class="small muted">One website per line (e.g. spendflo.com). Companies are queued and processed a few at a time.</p>
+    <textarea name="domains" style="min-height:120px" placeholder="spendflo.com&#10;zenduty.com"></textarea>
+    <p><label><input type="checkbox" name="dry_run" value="1"> Dry run (don't send, just draft)</label></p>
+    <button class="primary">Queue these companies</button>
+  </form>
+  <p class="small muted">Review mode is <b>{{ review_mode }}</b>: {{ 'drafts wait in the Review queue' if review_mode=='on' else 'qualified emails are sent straight to ' ~ my_email }}.</p>
+</div>
+{% endblock %}

@@ -62,9 +62,13 @@ def find_poc(domain: str, session=requests) -> FindPocOutput:
         raise PermanentToolError("no_results", f"POC_SOURCE=apollo_override and {domain} is not in poc_overrides.json")
 
     # 2. Cached Hunter result — never spend a second credit on the same domain.
+    #    File cache (local) first, then Postgres (survives Vercel's wiped /tmp).
     cp = cache_path(domain)
     if cp.exists():
         data = json.loads(cp.read_text())
+        return _to_output(data, from_cache=True)
+    data = _db_cache_get(domain)
+    if data is not None:
         return _to_output(data, from_cache=True)
 
     key = settings().hunter_api_key
@@ -95,7 +99,32 @@ def find_poc(domain: str, session=requests) -> FindPocOutput:
     data["_credits_left_before"] = credits
     cp.parent.mkdir(parents=True, exist_ok=True)
     cp.write_text(json.dumps(data, indent=2))      # cache even an empty result: an empty domain stays empty
+    _db_cache_put(domain, data)
     return _to_output(data, from_cache=False)
+
+
+def _db_cache_get(domain: str):
+    if not settings().database_url:
+        return None
+    try:
+        from agent.db import connect
+        with connect() as c:
+            row = c.execute("SELECT data FROM hunter_cache WHERE domain=%s", (domain,)).fetchone()
+        return row["data"] if row else None
+    except Exception:  # noqa: BLE001 — cache miss is safe: the credit check above still applies
+        return None
+
+
+def _db_cache_put(domain: str, data: dict) -> None:
+    if not settings().database_url:
+        return
+    try:
+        from agent.db import Jsonb, connect
+        with connect() as c:
+            c.execute("INSERT INTO hunter_cache (domain, data) VALUES (%s,%s) ON CONFLICT (domain) DO UPDATE SET data=EXCLUDED.data",
+                      (domain, Jsonb(data)))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _to_output(data: dict, from_cache: bool) -> FindPocOutput:

@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block body %}
+<h1>{{ c.domain }} <span class="pill {{ c.status }}">{{ c.status }}</span></h1>
+{% if v %}
+<div class="card"><h3>Why: {{ v.verdict }} · {{ v.score }}/100</h3>
+<p class="small muted">{{ v.breakdown }}</p>
+<ul>{% for r in v.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+{% if v.flags %}<p class="small muted">Flags: {{ v.flags|join(', ') }}</p>{% endif %}</div>
+{% endif %}
+{% if contacts %}<div class="card"><h3>Why this person</h3>{% for ct in contacts %}<p>{{ ct.rank_reason }}</p>{% endfor %}</div>{% endif %}
+<div class="card scroll"><h3>Pages read</h3><table><tr><th>URL</th><th>Type</th><th>Status</th><th>Tokens</th></tr>
+{% for p in pages %}<tr><td class="small">{{ p.url }}</td><td>{{ p.page_type }}</td><td class="{{ 'ok' if p.status=='ok' else 'FAILED' }}">{{ p.status }} {{ p.failure or '' }}</td><td>{{ p.clean_tokens }}</td></tr>{% endfor %}
+</table></div>
+{% if steps %}<div class="card"><h3>Research loop (the AI picks the page, code enforces the limit)</h3><ol>
+{% for s in steps %}<li><b>[{{ s.picked_by }}]</b> {{ s.pick }} for {{ s.target_question }} → {{ s.outcome }}{% if s.reason %}<br><span class="small muted">why: {{ s.reason }}</span>{% endif %}</li>{% endfor %}</ol></div>{% endif %}
+<div class="card scroll"><h3>Facts (✔ verified quote · ✘ rejected)</h3><table>
+{% for f in facts %}<tr><td>{{ '✔' if f.verified else '✘' }}</td><td>{{ f.field }}</td><td>{{ f.value.value }}</td><td class="small">“{{ f.quote }}”{% if not f.verified %}<br><span class="FAILED">{{ f.reject_reason }}</span>{% endif %}</td></tr>{% endfor %}
+</table></div>
+{% for d in drafts %}<div class="card"><h3>Email draft #{{ d.id }} <span class="pill {{ d.status }}">{{ d.status }}</span></h3>
+<p><b>{{ d.subject }}</b></p><pre style="white-space:pre-wrap;font:inherit">{{ d.body }}</pre>
+{% if d.sent_body and d.sent_body != d.body %}<p class="small muted">Sent version:</p><pre style="white-space:pre-wrap;font:inherit">{{ d.sent_body }}</pre>{% endif %}</div>{% endfor %}
+{% endblock %}

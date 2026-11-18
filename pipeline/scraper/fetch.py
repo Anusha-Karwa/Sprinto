@@ -271,6 +271,10 @@ def _is_texty(r: requests.Response) -> bool:
 
 def playwright_fetch(url: str) -> tuple[str, str]:
     """Headless Chromium: wait for network idle (≤ 20 s), scroll to the bottom once, return the DOM."""
+    from agent.config import ON_VERCEL
+    if ON_VERCEL:
+        # Vercel functions can't ship a browser. The page is labelled empty_after_render (never silently empty).
+        raise RuntimeError("no headless browser on serverless (Vercel)")
     from playwright.sync_api import sync_playwright
     cfg = icp()["fetch"]
     path = settings().chromium_path or ("/opt/pw-browsers/chromium" if os.path.exists("/opt/pw-browsers/chromium") else None)
