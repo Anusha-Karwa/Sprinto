@@ -298,8 +298,14 @@ def health(request: Request, user: str = Depends(require_login), conn=Depends(db
                              ORDER BY date_trunc('week', created_at)""").fetchall()
     alerts = conn.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT 20").fetchall()
     from agent.tools.find_poc import hunter_credits
+    def human(td):
+        if not td:
+            return None
+        mins = int(td.total_seconds() // 60)
+        d, h, m = mins // 1440, (mins % 1440) // 60, mins % 60
+        return " ".join(x for x in (f"{d} d" if d else "", f"{h} h" if h else "", f"{m} min") if x)
     return page(request, "health.html", "health", funnel=funnel, top=top,
-                handoff_rate=(handoff / replied) if replied else None, t2b=t2b, rounds=rounds, costs=costs, worth=worth,
+                handoff_rate=(handoff / replied) if replied else None, t2b=human(t2b), rounds=rounds, costs=costs, worth=worth,
                 segs=segs, weekly=weekly, alerts=alerts, credits=hunter_credits())
 
 
