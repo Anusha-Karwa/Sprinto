@@ -76,6 +76,34 @@ def finish_flow(flow, redirected_url: str) -> str:
     return profile["emailAddress"]
 
 
+PENDING = ROOT / ".oauth_pending.json"   # git-ignored; holds the PKCE verifier between the two steps
+
+
+def cli_url() -> str:
+    import json
+    flow, url = start_flow()
+    PENDING.write_text(json.dumps({"code_verifier": flow.code_verifier}))
+    PENDING.chmod(0o600)
+    return url
+
+
+def cli_finish(redirected_url: str) -> str:
+    import json
+    from google_auth_oauthlib.flow import Flow
+    cred_file, _ = _paths()
+    flow = Flow.from_client_secrets_file(str(cred_file), scopes=SCOPES, redirect_uri=REDIRECT)
+    flow.code_verifier = json.loads(PENDING.read_text())["code_verifier"]
+    who = finish_flow(flow, redirected_url)
+    PENDING.unlink(missing_ok=True)
+    return who
+
+
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "url":
+    print(cli_url())
+    sys.exit(0)
+if __name__ == "__main__" and len(sys.argv) > 2 and sys.argv[1] == "finish":
+    print("Connected as", cli_finish(sys.argv[2]))
+    sys.exit(0)
 if __name__ == "__main__":
     flow, url = start_flow()
     print("\n1) Open this link, sign in as the BOT account, and click Allow:\n\n" + url)

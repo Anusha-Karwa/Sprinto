@@ -9,3 +9,4 @@ data/*
 !data/.gitkeep
 run_report.md
 run_report.csv
+.oauth_pending.json
