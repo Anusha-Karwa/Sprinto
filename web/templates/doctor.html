@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% block body %}
+<h1>Doctor</h1>
+<p class="muted">Layered checks in debug order. The first FAIL in a section is where to start, with the next question to ask.</p>
+<form method="get"><input type="text" name="company" placeholder="company domain (optional, e.g. spendflo.com)" value="{{ company }}" style="max-width:360px">
+<button>Check</button></form>
+{% for name, checks in sections %}<div class="card"><h3>{{ name }}</h3><table>
+{% for c in checks %}<tr><td class="{{ 'ok' if c.ok else 'FAILED' }}"><b>{{ 'PASS' if c.ok else 'FAIL' }}</b></td><td>{{ c.layer }}</td>
+<td class="small">{{ c.evidence }}{% if not c.ok %}<br><b>Next question:</b> {{ c.next_question }}{% endif %}</td></tr>{% endfor %}</table></div>{% endfor %}
+{% endblock %}

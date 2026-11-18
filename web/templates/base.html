@@ -26,6 +26,8 @@
   .flash { padding:10px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); margin:10px 0; }
   .scroll { overflow-x:auto; }
   label.chip { display:inline-block; margin:2px 6px 2px 0; font-size:13px; }
+  mark { background: #fff2a8; color: #1d1d1f; }
+  .bar { height: 22px; background: var(--accent); border-radius: 4px; min-width: 2px; }
 </style>
 </head>
 <body>
@@ -36,6 +38,10 @@
   <a href="/review" class="{{ 'on' if nav=='review' }}">Review queue</a>
   <a href="/pipeline" class="{{ 'on' if nav=='pipeline' }}">Pipeline</a>
   <a href="/questions" class="{{ 'on' if nav=='questions' }}">Questions for you</a>
+  <a href="/health" class="{{ 'on' if nav=='health' }}">Health</a>
+  <a href="/disqualified" class="{{ 'on' if nav=='disqualified' }}">Really a no?</a>
+  <a href="/loop" class="{{ 'on' if nav=='loop' }}">Loop inspector</a>
+  <a href="/doctor" class="{{ 'on' if nav=='doctor' }}">Doctor</a>
   <span class="muted small" style="margin-left:auto">emails only ever go to {{ my_email }}</span>
 </header>
 <main>

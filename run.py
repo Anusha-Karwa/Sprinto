@@ -154,6 +154,9 @@ def process(domain: str, llm: LLM, fetcher: Fetcher, conn, run_id: int, dry_run:
          Jsonb([p.model_dump() for p in pkg.pains]), Jsonb(pkg.lint.model_dump()), pkg.prompt, c.role_bucket or "other",
          poc.size_bucket, htype, inj.learning_ids if inj else [], inj.block if inj else None)).fetchone()["id"]
 
+    if inj is not None:   # link this draft to the retrieval candidates logged while building its injection
+        conn.execute("""UPDATE retrieval_logs SET draft_id=%s WHERE draft_id IS NULL AND user_id=%s
+                        AND created_at > now() - interval '15 minutes'""", (draft_id, settings().reviewer_id))
     if not pkg.lint.ok:
         return done("needs_human_edit", "lint: " + "; ".join(pkg.lint.problems)[:180])
     done("drafted")     # fills cost/time so the notes are accurate

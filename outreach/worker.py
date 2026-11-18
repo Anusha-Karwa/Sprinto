@@ -35,6 +35,10 @@ def run_once(conn, now: datetime | None = None, on_interested=None) -> dict:
                 **({"now": (lambda: now)} if now else {}))
     s2 = process(deps)
     rep["seq2_started"], rep["seq2_replies"], rep["seq2_timeouts"] = s2["started"], s2["replies"], s2["timeouts"]
+    # Gates → alerts: catch silent failures on every tick, email undelivered alerts as one digest.
+    from agent.gates import deliver, run_gates
+    rep["alerts_fired"] = run_gates(conn)
+    rep["alerts_delivered"] = deliver(conn)
     return rep
 
 

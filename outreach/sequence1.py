@@ -85,6 +85,8 @@ def escalate(conn, thread_id: int, reason: str, *, classification=None, reply_te
         "reply": reply_text[:500] or "-", "what was tried": tried or "-", "suggested next step": next_step or "-",
     }
     out = run_tool(escalate_mod.make_tool(conn, thread_id, summary, send=notify), {"reason": reason}, conn=conn)
+    if t["sequence"] == 1:
+        conn.execute("UPDATE outreach_threads SET current_node='escalated' WHERE id=%s", (thread_id,))
     crm(conn, thread_id, "handed_off", reason)
     return out
 
@@ -156,6 +158,7 @@ def tick(conn, inbox, llm, *, now: datetime | None = None, notify=notify_growth_
         except Exception:  # noqa: BLE001 — the label is a convenience; the DB row is the real "processed" marker
             pass
         if bounce:
+            conn.execute("UPDATE outreach_messages SET status='consumed' WHERE gmail_message_id=%s", (gid,))
             report["skipped"].append((gid, "bounce"))
             continue
         if t["sequence"] == 2:
@@ -181,9 +184,13 @@ def handle_reply(conn, t: dict, m, llm, *, now: datetime, notify=notify_growth_l
         escalate(conn, t["id"], f"could not classify the reply ({out.error_class})", reply_text=text, notify=notify,
                  next_step="read the reply and answer by hand")
         return "escalated:classify_failed"
-    conn.execute("""UPDATE outreach_messages SET classification=%s, reply_intent=%s, confidence=%s, quote=%s, extracted_times=%s
-                    WHERE gmail_message_id=%s""",
-                 (c.reply_status, c.reply_intent, c.confidence, c.quote, Jsonb(c.proposed_times), m.gmail_id))
+    # status 'consumed': Sequence 1 has acted on this reply, so the scheduler (Sequence 2) must never read it as an
+    # answer to its time options (bug found by the prospect simulation: an old out-of-office reply was re-read).
+    conn.execute("""UPDATE outreach_messages SET classification=%s, reply_intent=%s, confidence=%s, quote=%s, extracted_times=%s,
+                    status = CASE WHEN %s THEN status ELSE 'consumed' END WHERE gmail_message_id=%s""",
+                 (c.reply_status, c.reply_intent, c.confidence, c.quote, Jsonb(c.proposed_times),
+                  c.reply_status == "interested" and c.reply_intent == "none" and c.confidence >= cfg["interested_min_confidence"],
+                  m.gmail_id))
     conn.execute("UPDATE outreach_threads SET reply_intent=%s, updated_at=now() WHERE id=%s", (c.reply_intent, t["id"]))
     sure = c.confidence >= cfg["interested_min_confidence"]
 

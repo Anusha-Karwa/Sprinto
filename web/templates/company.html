@@ -6,7 +6,10 @@
 <ul>{% for r in v.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
 {% if v.flags %}<p class="small muted">Flags: {{ v.flags|join(', ') }}</p>{% endif %}</div>
 {% endif %}
-{% if contacts %}<div class="card"><h3>Why this person</h3>{% for ct in contacts %}<p>{{ ct.rank_reason }}</p>{% endfor %}</div>{% endif %}
+{% if contacts %}<div class="card"><h3>Why this person</h3>{% for ct in contacts %}<p>{{ ct.rank_reason }}</p>{% endfor %}
+{% if ranking %}<p class="small muted">Everyone considered:</p><table class="small">{% for p in ranking.data %}<tr><td>{{ p.name or '(no name)' }}</td><td>{{ p.position or '–' }}</td>
+<td>conf {{ p.confidence }}</td><td>{% if p.rank %}#{{ p.rank }} {{ p.role }}{% else %}<span class="muted">excluded: {{ p.excluded }}</span>{% endif %}</td></tr>{% endfor %}</table>{% endif %}
+</div>{% endif %}
 <div class="card scroll"><h3>Pages read</h3><table><tr><th>URL</th><th>Type</th><th>Status</th><th>Tokens</th></tr>
 {% for p in pages %}<tr><td class="small">{{ p.url }}</td><td>{{ p.page_type }}</td><td class="{{ 'ok' if p.status=='ok' else 'FAILED' }}">{{ p.status }} {{ p.failure or '' }}</td><td>{{ p.clean_tokens }}</td></tr>{% endfor %}
 </table></div>

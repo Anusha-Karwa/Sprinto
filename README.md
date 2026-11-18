@@ -151,6 +151,18 @@ python -m agent.db            # apply migrations
 pytest
 ```
 
+## Running it
+
+| What | Command / page |
+|---|---|
+| The case: research → email to MY_EMAIL | `python run.py domains.csv` (`--dry-run` drafts only) |
+| Web app (Vercel) | `/` overview · `/runs` · `/review` · `/pipeline` · `/questions` · `/health` · `/disqualified` · `/loop` · `/doctor` |
+| Inbox worker (Seq 1 + Seq 2 + gates) | `python -m outreach.worker [--once] [--clock ISO]` · on Vercel `/api/cron/worker` |
+| Health check, layer by layer | `python -m agent.doctor --user anu [--company acme.io] [--thread 12]` |
+| 6 scripted prospects end to end | `python -m eval.simulate_prospects` |
+| Does the review loop learn? | `python -m eval.simulate_reviewer` (result: `eval/reviewer_simulation_result.txt`) |
+| Tests | `pytest` (no real Google/Hunter/Gemini calls; real Google is blocked in tests) |
+
 ## Deploying (Vercel + Neon)
 
 - **Database: Neon** (Postgres + pgvector). Put its connection string in `DATABASE_URL`. Tables are created
@@ -177,4 +189,4 @@ pytest
 | B | 7–8 Review app + feedback loop | ⏳ |
 | C | 9 Sequence 1 (reply reading + 3-way branch + OOO/unsubscribe/escalate) | ✅ (live reply test pending) |
 | D | 10 Sequence 2 (LangGraph, Postgres checkpoints, 7-row state table test) | ✅ (live booking test pending) |
-| E | 11 Observability | ⏳ |
+| E | 11 Health/funnel, Disqualified sample, Loop inspector, gates + alerts, doctor, 6-prospect simulation | ✅ |

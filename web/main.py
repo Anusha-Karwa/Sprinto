@@ -185,6 +185,8 @@ def company(cid: int, request: Request, user: str = Depends(require_login), conn
                 steps=q("SELECT * FROM loop_steps WHERE company_id=%s ORDER BY step"),
                 facts=q("SELECT * FROM facts WHERE company_id=%s ORDER BY verified DESC, id"),
                 contacts=q("SELECT * FROM contacts WHERE company_id=%s ORDER BY rank"),
+                ranking=conn.execute("SELECT data FROM events WHERE company_id=%s AND step='poc_ranking' ORDER BY id DESC LIMIT 1",
+                                     (cid,)).fetchone(),
                 drafts=q("SELECT * FROM drafts WHERE company_id=%s ORDER BY id"))
 
 
@@ -263,6 +265,100 @@ def resolve(thread_id: int, action: str, user: str = Depends(require_login), con
     deps = Deps(conn=conn, calendar=GoogleCalendar(), llm=LLM(), send=gmail_send, notify=notify_growth_lead)
     resolve_escalation(deps, thread_id, action)
     return RedirectResponse(f"/pipeline?msg=Conversation {thread_id}: {action}d.", status_code=303)
+
+
+# ---------------- Phase E: observability ----------------
+
+@app.get("/health", response_class=HTMLResponse)
+def health(request: Request, user: str = Depends(require_login), conn=Depends(db)):
+    one = lambda sql, *a: conn.execute(sql, a).fetchone()  # noqa: E731
+    funnel = [
+        ("Companies researched", one("SELECT count(*) n FROM companies WHERE status NOT IN ('queued','processing')")["n"]),
+        ("Qualified", one("SELECT count(DISTINCT company_id) n FROM verdicts WHERE verdict IN ('QUALIFIED','QUALIFIED_FLAGGED')")["n"]),
+        ("Emailed", one("SELECT count(*) n FROM outreach_threads WHERE gmail_thread_id IS NOT NULL")["n"]),
+        ("Replied", one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in' AND kind='reply'")["n"]),
+        ("Interested", one("SELECT count(*) n FROM outreach_threads WHERE sequence=2")["n"]),
+        ("Times proposed", one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE kind='proposal'")["n"]),
+        ("Meetings booked", one("SELECT count(*) n FROM meetings")["n"]),
+    ]
+    top = max(1, funnel[0][1])
+    replied = one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in'")["n"]
+    handoff = one("SELECT count(DISTINCT thread_id) n FROM escalations")["n"]
+    t2b = one("""SELECT avg(m.created_at - e.created_at) d FROM meetings m JOIN outreach_threads t ON t.id=m.thread_id
+                 JOIN LATERAL (SELECT created_at FROM events WHERE step='crm' AND (data->>'thread_id')::int=t.id
+                               AND message LIKE 'stage → interested%%' ORDER BY id LIMIT 1) e ON true""")["d"]
+    rounds = one("""SELECT avg(n) a FROM (SELECT count(*) n FROM outreach_messages WHERE kind='proposal' GROUP BY thread_id) x""")["a"]
+    costs = one("""SELECT avg(cost_usd) c, avg(seconds) s, sum(cost_usd) total, count(*) n FROM companies WHERE seconds IS NOT NULL""")
+    worth = one("SELECT count(*) FILTER (WHERE worth_30_min) y, count(worth_30_min) n FROM meetings")
+    segs = conn.execute("""SELECT DISTINCT ON (user_id, role_bucket, size_bucket) user_id, role_bucket, size_bucket, n, avg_edit_depth,
+                                  edit_rate, rejection_rate, disagreement, created_at FROM loop_metrics
+                           ORDER BY user_id, role_bucket, size_bucket, id DESC""").fetchall()
+    weekly = conn.execute("""SELECT to_char(date_trunc('week', created_at), 'DD Mon') wk, count(*) n, avg(edit_depth) depth,
+                                    avg((action='rejected')::int) rej FROM feedback_events GROUP BY 1, date_trunc('week', created_at)
+                             ORDER BY date_trunc('week', created_at)""").fetchall()
+    alerts = conn.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT 20").fetchall()
+    from agent.tools.find_poc import hunter_credits
+    return page(request, "health.html", "health", funnel=funnel, top=top,
+                handoff_rate=(handoff / replied) if replied else None, t2b=t2b, rounds=rounds, costs=costs, worth=worth,
+                segs=segs, weekly=weekly, alerts=alerts, credits=hunter_credits())
+
+
+@app.get("/disqualified", response_class=HTMLResponse)
+def disqualified(request: Request, user: str = Depends(require_login), conn=Depends(db)):
+    """Design decision 3 (against automation bias): every run shows a random 10% of DISQUALIFIED companies."""
+    rate = feedback_cfg()["disqualified_sample_rate"]
+    sample = conn.execute(
+        """SELECT * FROM (
+             SELECT v.*, c.domain, c.run_id, row_number() OVER (PARTITION BY c.run_id ORDER BY md5(v.id::text)) rn,
+                    count(*) OVER (PARTITION BY c.run_id) total
+             FROM verdicts v JOIN companies c ON c.id=v.company_id WHERE v.verdict='DISQUALIFIED') x
+           WHERE rn <= greatest(1, ceil(total * %s)) ORDER BY run_id DESC, id""", (rate,)).fetchall()
+    ans = conn.execute("""SELECT count(*) FILTER (WHERE fn_check_answer IS NOT NULL) n,
+                                 count(*) FILTER (WHERE fn_check_answer = false) fn FROM verdicts""").fetchone()
+    return page(request, "disqualified.html", "disqualified", sample=sample, answered=ans["n"],
+                fn_rate=(ans["fn"] / ans["n"]) if ans["n"] else None, pct=int(rate * 100))
+
+
+@app.post("/disqualified/{verdict_id}")
+def disqualified_answer(verdict_id: int, really_no: str = Form(...), user: str = Depends(require_login), conn=Depends(db)):
+    conn.execute("UPDATE verdicts SET fn_check_answer=%s, fn_checked_at=now() WHERE id=%s", (really_no == "yes", verdict_id))
+    return RedirectResponse("/disqualified?msg=Saved.", status_code=303)
+
+
+@app.post("/meetings/{meeting_id}/worth")
+def meeting_worth(meeting_id: int, worth: str = Form(...), user: str = Depends(require_login), conn=Depends(db)):
+    """The outcome instrument: after each call, 'Was this meeting worth 30 minutes?'"""
+    conn.execute("UPDATE meetings SET worth_30_min=%s WHERE id=%s", (worth == "yes", meeting_id))
+    return RedirectResponse("/pipeline?msg=Thanks — recorded.", status_code=303)
+
+
+@app.get("/loop", response_class=HTMLResponse)
+def loop_inspector(request: Request, user: str = Depends(require_login), conn=Depends(db)):
+    """Debug order: Signal → Capture/Store → Retrieve → Apply, one card per reviewed draft."""
+    from markupsafe import Markup, escape
+    events = conn.execute("""SELECT e.*, d.full_prompt, d.injected_block, d.role_bucket, d.size_bucket, c.domain FROM feedback_events e
+                             JOIN drafts d ON d.id=e.draft_id JOIN companies c ON c.id=d.company_id
+                             WHERE e.user_id=%s ORDER BY e.id DESC LIMIT 20""", (settings().reviewer_id,)).fetchall()
+    cards = []
+    for e in events:
+        e = dict(e)
+        e["learnings"] = conn.execute("SELECT id, learning, status, support_count FROM learnings WHERE source_event_id=%s", (e["id"],)).fetchall()
+        e["retrieval"] = conn.execute("""SELECT r.*, l.learning FROM retrieval_logs r LEFT JOIN learnings l ON l.id=r.learning_id
+                                         WHERE r.draft_id=%s ORDER BY r.selected DESC, r.final_score DESC""", (e["draft_id"],)).fetchall()
+        prompt, block = e.get("full_prompt") or "", e.get("injected_block") or ""
+        if block and block in prompt:
+            a, b = prompt.split(block, 1)
+            e["prompt_html"] = Markup(f"{escape(a)}<mark>{escape(block)}</mark>{escape(b)}")
+        else:
+            e["prompt_html"] = escape(prompt)
+        cards.append(e)
+    return page(request, "loop.html", "loop", cards=cards)
+
+
+@app.get("/doctor", response_class=HTMLResponse)
+def doctor_page(request: Request, company: str | None = None, user: str = Depends(require_login), conn=Depends(db)):
+    from agent.doctor import run as doctor_run
+    return page(request, "doctor.html", "doctor", sections=doctor_run(conn, settings().reviewer_id, company or None), company=company or "")
 
 
 @app.get("/questions", response_class=HTMLResponse)

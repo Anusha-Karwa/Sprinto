@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block body %}
+<h1>Health</h1>
+<div class="card"><h3>Funnel — the headline is meetings booked</h3><table>
+{% for name, n in funnel %}<tr><td style="width:180px">{{ name }}</td><td style="width:60px"><b>{{ n }}</b></td>
+<td><div class="bar" style="width: {{ (100 * n / top)|round(1) }}%"></div></td></tr>{% endfor %}</table></div>
+<div class="kpis">
+ <div class="card kpi"><div class="muted small">Hand-off rate (escalated / replied)</div><div class="n">{{ '%d%%'|format(100*handoff_rate) if handoff_rate is not none else '–' }}</div></div>
+ <div class="card kpi"><div class="muted small">Time interested → booked</div><div class="n" style="font-size:20px">{{ t2b or '–' }}</div></div>
+ <div class="card kpi"><div class="muted small">Avg proposal rounds</div><div class="n">{{ '%.1f'|format(rounds) if rounds else '–' }}</div></div>
+ <div class="card kpi"><div class="muted small">Meetings worth 30 min</div><div class="n">{{ worth.y }} / {{ worth.n }}</div></div>
+</div>
+<div class="kpis">
+ <div class="card kpi"><div class="muted small">Avg seconds per company (target &lt; 120)</div><div class="n">{{ '%.0f'|format(costs.s) if costs.s else '–' }}</div></div>
+ <div class="card kpi"><div class="muted small">Avg LLM cost per company</div><div class="n">{{ '$%.4f'|format(costs.c) if costs.c else '–' }}</div></div>
+ <div class="card kpi"><div class="muted small">Total LLM cost</div><div class="n">{{ '$%.3f'|format(costs.total) if costs.total else '–' }}</div></div>
+ <div class="card kpi"><div class="muted small">Hunter searches left</div><div class="n">{{ credits if credits is not none else '–' }}</div></div>
+</div>
+<div class="card scroll"><h3>Review loop by segment (latest window)</h3><table>
+<tr><th>Reviewer</th><th>Segment</th><th>n</th><th>Avg edit depth</th><th>Edit rate</th><th>Rejection rate</th><th>Disagreement</th></tr>
+{% for g in segs %}<tr><td>{{ g.user_id }}</td><td>{{ g.role_bucket }} / {{ g.size_bucket }}</td><td>{{ g.n }}</td><td>{{ '%.2f'|format(g.avg_edit_depth) }}</td>
+<td>{{ '%.0f%%'|format(100*g.edit_rate) }}</td><td>{{ '%.0f%%'|format(100*g.rejection_rate) }}</td><td>{{ '%.2f'|format(g.disagreement) }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">No reviews yet.</td></tr>{% endfor %}</table>
+<p class="small muted">Kill criterion: &gt; 50% of emails rewritten, PoC accuracy &lt; 60%, or slower than doing it by hand.</p></div>
+<div class="card scroll"><h3>Edit depth by week</h3><table><tr><th>Week</th><th>Reviews</th><th>Avg edit depth</th><th>Rejections</th></tr>
+{% for w in weekly %}<tr><td>{{ w.wk }}</td><td>{{ w.n }}</td><td>{{ '%.2f'|format(w.depth or 0) }}</td><td>{{ '%.0f%%'|format(100*(w.rej or 0)) }}</td></tr>
+{% else %}<tr><td colspan="4" class="muted">–</td></tr>{% endfor %}</table></div>
+<div class="card scroll"><h3>Alerts</h3><table>{% for a in alerts %}<tr><td class="small">{{ a.created_at.strftime('%d %b %H:%M') }}</td>
+<td class="{{ 'FAILED' if a.severity=='critical' else 'QUALIFIED_FLAGGED' }}">{{ a.gate }}</td><td class="small">{{ a.message }}</td>
+<td class="small muted">{{ 'emailed' if a.delivered else 'pending' }}</td></tr>{% else %}<tr><td class="muted">No alerts.</td></tr>{% endfor %}</table></div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block body %}
+<h1>Was this really a no?</h1>
+<p class="muted">The robot only shows you the companies it liked. So every run, a random {{ pct }}% of the companies it turned down
+are shown here with its reasons. If you think one was a mistake, say so — that's the false-negative rate.</p>
+<div class="kpis"><div class="card kpi"><div class="muted small">Checked</div><div class="n">{{ answered }}</div></div>
+<div class="card kpi"><div class="muted small">False-negative rate</div><div class="n">{{ '%.0f%%'|format(100*fn_rate) if fn_rate is not none else '–' }}</div></div></div>
+{% for v in sample %}<div class="card"><h3><a href="/companies/{{ v.company_id }}">{{ v.domain }}</a> <span class="muted small">run {{ v.run_id }} · score {{ v.score }}</span></h3>
+<ul class="small">{% for r in v.reasons[:4] %}<li>{{ r }}</li>{% endfor %}</ul>
+<form method="post" action="/disqualified/{{ v.id }}">Was this really a no?
+<button name="really_no" value="yes">Yes, correct</button> <button name="really_no" value="no">No — we should have emailed them</button>
+{% if v.fn_check_answer is not none %}<span class="small muted">answered: {{ 'yes' if v.fn_check_answer else 'no (false negative)' }}</span>{% endif %}</form></div>
+{% else %}<p class="muted">No disqualified companies yet.</p>{% endfor %}
+{% endblock %}

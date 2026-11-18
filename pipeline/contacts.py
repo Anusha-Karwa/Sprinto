@@ -161,6 +161,9 @@ def find_contacts(domain: str, facts: CompanyFacts, verdict: str, *, conn=None, 
     res = rank(out.output.people, facts, company, out.output.org_headcount)
     res.credits_left, res.from_cache = out.output.credits_left, out.output.from_cache
     if conn is not None:
+        from agent.db import Jsonb
+        conn.execute("INSERT INTO events (run_id, company_id, step, message, data) VALUES (%s,%s,'poc_ranking',%s,%s)",
+                     (run_id, company_id, f"{res.status}: size {res.size_bucket} ({res.size_source})", Jsonb(res.ranked)))
         for c, r in ((res.primary, 1), (res.backup, 2)):
             if c:
                 conn.execute("""INSERT INTO contacts (company_id, first_name, last_name, position, seniority, department,

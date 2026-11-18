@@ -519,8 +519,9 @@ def process(deps: Deps, graph=None) -> dict:
                             ORDER BY id DESC LIMIT 1""", (t["id"],)).fetchone()
         rep["started"].append((t["id"], start(deps, graph, t, (m or {}).get("body") and _strip(m["body"]) or "",
                                               (m or {}).get("created_at") or now, (m or {}).get("rfc_message_id"))))
-        if m:
-            conn.execute("UPDATE outreach_messages SET status='consumed' WHERE id=%s", (m["id"],))
+        # everything received before scheduling started belongs to Sequence 1
+        conn.execute("UPDATE outreach_messages SET status='consumed' WHERE thread_id=%s AND direction='in' AND status='received'",
+                     (t["id"],))
     for m in conn.execute("""SELECT m.*, t.id AS tid FROM outreach_messages m JOIN outreach_threads t ON t.id=m.thread_id
                              WHERE t.sequence=2 AND t.langgraph_thread_id IS NOT NULL AND t.current_node IN ('await_reply','escalated')
                              AND m.direction='in' AND m.kind='reply' AND m.status='received' ORDER BY m.id""").fetchall():

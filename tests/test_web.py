@@ -85,3 +85,30 @@ def test_home_shows_inbox_checker_and_button(client, test_db, monkeypatch):
 
 def test_pipeline_page(client, test_db):
     assert "No threads yet" in client.get("/pipeline", headers=AUTH).text
+
+
+@pytest.mark.parametrize("path", ["/health", "/disqualified", "/loop", "/doctor", "/doctor?company=acme.io", "/pipeline"])
+def test_phase_e_pages_render_empty(client, path):
+    r = client.get(path, headers=AUTH)
+    assert r.status_code == 200, r.text[:500]
+
+
+def test_disqualified_sample_and_answer(client, test_db):
+    test_db.execute("INSERT INTO runs (id) VALUES (1)")
+    for i in range(12):
+        cid = test_db.execute("INSERT INTO companies (run_id, domain, status) VALUES (1,%s,'DISQUALIFIED') RETURNING id", (f"d{i}.io",)).fetchone()["id"]
+        test_db.execute("INSERT INTO verdicts (company_id, verdict, score, reasons) VALUES (%s,'DISQUALIFIED',10,'[\"low score\"]')", (cid,))
+    page = client.get("/disqualified", headers=AUTH).text
+    assert page.count("Was this really a no?") == 3            # 1 heading + ceil(10% of 12) = 2 sampled
+    vid = test_db.execute("SELECT id FROM verdicts LIMIT 1").fetchone()["id"]
+    client.post(f"/disqualified/{vid}", data={"really_no": "no"}, headers=AUTH)
+    assert "100%" in client.get("/disqualified", headers=AUTH).text   # 1 checked, 1 false negative
+
+
+def test_health_and_doctor_with_data(client, test_db):
+    from tests.test_simulations import simulate
+    simulate(test_db)
+    h = client.get("/health", headers=AUTH).text
+    assert "Meetings booked" in h and "<b>3</b>" in h
+    d = client.get("/doctor", headers=AUTH).text
+    assert "Agent" in d and "FAIL" not in d.split("<h3>Agent</h3>")[1]
