@@ -141,6 +141,8 @@ eval/            prospect + reviewer simulations
 tests/           unit tests (no real Google/Hunter/Gemini calls)
 ```
 
+Header photo: "Dark blue to purple gradient" by Luke Chesser on Unsplash (Unsplash License), `public/hero.webp`.
+
 ## Setup (dev)
 
 ```bash

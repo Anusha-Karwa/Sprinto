@@ -67,7 +67,7 @@ def require_login(creds: HTTPBasicCredentials = Depends(security)) -> str:
     return creds.username or settings().reviewer_id
 
 
-TITLES = {"home": "Overview", "runs": "Runs", "review": "Review queue", "pipeline": "Pipeline", "questions": "Questions for you",
+TITLES = {"how": "How it works", "home": "Overview", "runs": "Runs", "review": "Review queue", "pipeline": "Pipeline", "questions": "Questions for you",
           "health": "Health", "disqualified": "Was this really a no?", "loop": "Loop inspector", "doctor": "Doctor"}
 
 
@@ -94,6 +94,16 @@ def page(request: Request, name: str, nav: str, **ctx) -> HTMLResponse:
             "review_mode": settings().review_mode, "flash": request.query_params.get("msg"),
             **chrome(getattr(request.state, "conn", None))}
     return templates.TemplateResponse(request, name, {**base, **ctx})
+
+
+# ---------------- static ----------------
+
+@app.get("/hero.webp", include_in_schema=False)
+def hero_image():
+    """On Vercel, public/ is served by the CDN; this route serves the same file locally."""
+    from fastapi.responses import FileResponse
+    return FileResponse(Path(__file__).resolve().parent.parent / "public" / "hero.webp", media_type="image/webp",
+                        headers={"Cache-Control": "public, max-age=604800"})
 
 
 # ---------------- health + schedule ----------------
@@ -147,11 +157,15 @@ def home(request: Request, user: str = Depends(require_login), conn=Depends(db))
     r = conn.execute(f"""SELECT {FUNNEL_SQL},
         (SELECT count(*) FROM feedback_events) AS reviewed,
         (SELECT count(*) FROM feedback_events WHERE action <> 'approved_as_is') AS edited,
-        (SELECT avg(seconds) FROM companies WHERE seconds IS NOT NULL) AS avg_secs""").fetchone()
+        (SELECT avg(seconds) FROM companies WHERE seconds IS NOT NULL) AS avg_secs,
+        (SELECT count(*) FROM contacts WHERE rank=1) AS people,
+        (SELECT count(*) FROM drafts WHERE status NOT IN ('dry_run')) AS drafted,
+        (SELECT count(*) FROM drafts WHERE status IN ('pending_review','needs_human_edit') AND user_id IS NOT NULL) AS pending""").fetchone()
     funnel = [(label, r[key]) for key, label in FUNNEL]
     k = {"meetings": r["meetings"], "emailed": r["emailed"], "replied": r["replied"], "companies": r["researched"],
          "qualified": r["qualified"], "reviewed": r["reviewed"], "edited": r["edited"]}
     k["avg_secs"] = round(float(r["avg_secs"])) if r["avg_secs"] else None
+    k.update(people=r["people"], drafted=r["drafted"], pending=r["pending"], interested=r["interested"])
     k["reply_rate"] = round(100 * k["replied"] / k["emailed"]) if k["emailed"] else None
     k["edit_rate"] = round(100 * k["edited"] / k["reviewed"]) if k["reviewed"] else None
     upcoming = conn.execute("""SELECT m.*, c.domain FROM meetings m JOIN companies c ON c.id=m.company_id
@@ -163,7 +177,15 @@ def home(request: Request, user: str = Depends(require_login), conn=Depends(db))
         (SELECT v.created_at, c.domain, 'verdict', v.verdict, NULL, NULL, NULL, v.score::text
            FROM verdicts v JOIN companies c ON c.id=v.company_id)
         ORDER BY at DESC LIMIT 10""").fetchall()
-    return page(request, "home.html", "home", k=k, funnel=funnel, upcoming=upcoming, activity=activity)
+    return page(request, "home.html", "home", k=k, funnel=funnel, upcoming=upcoming, activity=activity,
+                lead=settings().growth_lead_name)
+
+
+@app.get("/how", response_class=HTMLResponse)
+def how(request: Request, user: str = Depends(require_login), conn=Depends(db)):
+    """A plain-language explainer of what the robot does, step by step, with live numbers."""
+    r = conn.execute(f"SELECT {FUNNEL_SQL}, (SELECT count(*) FROM contacts WHERE rank=1) AS people").fetchone()
+    return page(request, "how.html", "how", r=r)
 
 
 FUNNEL = [("researched", "Researched"), ("qualified", "Qualified"), ("emailed", "Emailed"), ("replied", "Replied"),

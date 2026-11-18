@@ -1,26 +1,52 @@
 {% extends "base.html" %}{% from "_ui.html" import icon, pill, stat, empty %}
 {% block subheading %}<div class="small muted">Research → qualify → right person → personal email → reply → booked call</div>{% endblock %}
+{% block scripts %}<script>
+(function(){const h=new Date().getHours(); const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening'; const el=document.getElementById('greet'); if(el) el.textContent=g+', {{ lead }}';})();
+</script>{% endblock %}
 {% block body %}
-<div class="grid g-main">
-  <div class="stack">
-    <div class="card">
-      <div class="hero">
-        <div>
-          <div class="stat-label">Meetings booked</div>
-          <div class="hero-num">{{ k.meetings }}</div>
-          <div class="small muted" style="margin-top:6px">The outcome that matters. Emails sent is activity, not outcome.</div>
-        </div>
-        <div class="grid g2">
-          {{ stat('Reply rate', (k.reply_rate|string ~ '%') if k.reply_rate is not none else '–', k.replied ~ ' of ' ~ k.emailed ~ ' emailed') }}
-          {{ stat('Time per company', (k.avg_secs|string ~ 's') if k.avg_secs else '–', 'target < 2 min · manual 15–20 min',
-                  ('good' if k.avg_secs and k.avg_secs < 120 else None)) }}
-          {{ stat('Emails rewritten', (k.edit_rate|string ~ '%') if k.edit_rate is not none else '–', 'target < 20%',
-                  ('good' if k.edit_rate is not none and k.edit_rate < 20 else ('warning' if k.edit_rate is not none else None))) }}
-          {{ stat('Qualified', k.qualified ~ ' / ' ~ k.companies, 'companies researched', href='/runs') }}
-        </div>
+<section class="photo-hero">
+  <div class="row" style="align-items:flex-start;justify-content:space-between;gap:24px">
+    <div>
+      <div class="small" id="greet">Hello, {{ lead }}</div>
+      <div style="font-size:22px;font-weight:650;margin:4px 0 18px;max-width:560px">Here's what the robot did for Sprinto's outbound.</div>
+      <div class="stat-label" style="color:rgba(255,255,255,.85)">Meetings booked</div>
+      <div class="hero-num">{{ k.meetings }}</div>
+      <div class="small" style="margin-top:6px">The outcome that matters. Emails sent is activity, not outcome.</div>
+      <div class="row" style="margin-top:18px">
+        <button class="btn btn-light" data-open="newrun">{{ icon('plus', 16) }}New run</button>
+        <a class="btn btn-outline-light" href="/how">{{ icon('sparkles', 16) }}How it works</a>
       </div>
     </div>
+    <div class="grid" style="grid-template-columns:repeat(2,minmax(150px,1fr));gap:10px;min-width:min(100%,340px)">
+      <div class="glass"><div class="stat-label">Reply rate</div><div class="stat-value">{{ (k.reply_rate|string ~ '%') if k.reply_rate is not none else '–' }}</div><div class="stat-sub">{{ k.replied }} of {{ k.emailed }} emailed</div></div>
+      <div class="glass"><div class="stat-label">Time per company</div><div class="stat-value">{{ (k.avg_secs|string ~ 's') if k.avg_secs else '–' }}</div><div class="stat-sub">vs 15–20 min by hand</div></div>
+      <div class="glass"><div class="stat-label">Emails rewritten</div><div class="stat-value">{{ (k.edit_rate|string ~ '%') if k.edit_rate is not none else '–' }}</div><div class="stat-sub">target under 20%</div></div>
+      <div class="glass"><div class="stat-label">Waiting for you</div><div class="stat-value">{{ badges.review + badges.escalations + badges.questions }}</div><div class="stat-sub">reviews, hand-offs, questions</div></div>
+    </div>
+  </div>
+</section>
 
+<div class="row section" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">The journey, live</h2>
+  <span class="small muted">Each step is one thing the robot does. Click to see it.</span></div>
+{% set steps = [
+  ('Research', k.companies, 'Reads each website, keeps the useful parts', 'search', '/runs', '#2f23ab'),
+  ('Qualify', k.qualified, 'Scores fit out of 100 with quotes', 'scale', '/runs', '#4a2aa9'),
+  ('Find person', k.people, 'Picks CEO / CTO / CISO by size', 'user', '/runs', '#6130a6'),
+  ('Write email', k.drafted, 'Hook from their site + 1 Sprinto claim', 'edit', '/review', '#7b34a4'),
+  ('You review', k.pending, 'Nothing is sent without you', 'inbox', '/review', '#963aa1'),
+  ('Reply read', k.replied, 'Interested? not now? unclear?', 'mail', '/pipeline', '#b03fa0'),
+  ('Call booked', k.meetings, 'Times proposed, Meet invite sent', 'calendar', '/pipeline', '#ca459e'),
+] %}
+<div class="journey">
+{% for name, n, desc, ic, href, color in steps %}
+  <a class="step" href="{{ href }}"><span class="num-tag">{{ loop.index }}</span>
+    <span class="step-ic" style="background:{{ color }}">{{ icon(ic, 16) }}</span>
+    <div class="n">{{ n }}</div><div class="lbl">{{ name }}</div><div class="desc">{{ desc }}</div></a>
+{% endfor %}
+</div>
+
+<div class="grid g-main section">
+  <div class="stack">
     <div class="card">
       <div class="card-head"><h2 style="margin:0">Funnel</h2><span class="spacer"></span><a class="small" href="/health">Health {{ icon('chevron', 14) }}</a></div>
       {% set top = [funnel[0][1], 1]|max %}
