@@ -15,7 +15,14 @@
   <td class="small">{% if m.direction=='in' %}{{ m.body }}{% else %}{{ m.subject }}{% endif %}</td>
   <td class="small">{% if m.classification %}<b>{{ m.classification }}</b>/{{ m.reply_intent }} ({{ '%.2f'|format(m.confidence or 0) }})<br>“{{ m.quote }}”{% endif %}</td></tr>{% endfor %}
   </table></div>
-  {% for e in t.escalations %}<p class="QUALIFIED_FLAGGED small">Escalated: {{ e.reason }} ({{ e.status }})</p>{% endfor %}
+  {% if t.meeting %}<p class="ok"><b>Meeting booked:</b> {{ t.meeting.start_at.strftime('%a %d %b %H:%M UTC') }}
+     · <a href="{{ t.meeting.meet_link }}">Meet link</a></p>{% endif %}
+  {% if t.holds %}<p class="small muted">Slots: {% for h in t.holds %}{{ h.start_at.strftime('%a %d %b %H:%M UTC') }} ({{ h.status }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+  {% for e in t.escalations %}<p class="QUALIFIED_FLAGGED small">Escalated: {{ e.reason }} ({{ e.status }})</p>
+    {% if e.status == 'open' and t.sequence == 2 and t.current_node == 'escalated' %}
+    <form method="post" style="display:inline" action="/pipeline/{{ t.id }}/resume"><button>Resume (wait for their next reply)</button></form>
+    <form method="post" style="display:inline" action="/pipeline/{{ t.id }}/close"><button>Close</button></form>{% endif %}
+  {% endfor %}
 </div>
 {% else %}<p class="muted">No threads yet. Approve an email in the Review queue to start one.</p>{% endfor %}
 {% endblock %}

@@ -159,9 +159,8 @@ def tick(conn, inbox, llm, *, now: datetime | None = None, notify=notify_growth_
             report["skipped"].append((gid, "bounce"))
             continue
         if t["sequence"] == 2:
-            report["processed"].append((gid, "sequence2"))   # Phase D's graph handles replies once scheduling started
-            if on_interested:
-                on_interested(conn, t, m, None)
+            # Scheduling has started: the LangGraph run (sequence2.process) consumes this reply, not Sequence 1.
+            report["processed"].append((gid, "sequence2:queued_for_scheduler"))
             continue
         report["processed"].append((gid, handle_reply(conn, t, m, llm, now=now, notify=notify, on_interested=on_interested)))
 

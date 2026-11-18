@@ -176,5 +176,5 @@ pytest
 | A | 6 Pain points, draft, lint, send → **email in inbox** | ✅ |
 | B | 7–8 Review app + feedback loop | ⏳ |
 | C | 9 Sequence 1 (reply reading + 3-way branch + OOO/unsubscribe/escalate) | ✅ (live reply test pending) |
-| D | 10 Sequence 2 (LangGraph) | ⏳ |
+| D | 10 Sequence 2 (LangGraph, Postgres checkpoints, 7-row state table test) | ✅ (live booking test pending) |
 | E | 11 Observability | ⏳ |

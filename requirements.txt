@@ -13,3 +13,5 @@ google-auth-oauthlib>=1.2
 pyyaml>=6.0
 python-dotenv>=1.0
 rich>=13.0
+langgraph>=1.2                  # Sequence 2 state machine
+langgraph-checkpoint-postgres>=3.2

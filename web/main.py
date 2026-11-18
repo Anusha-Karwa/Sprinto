@@ -245,8 +245,24 @@ def pipeline(request: Request, user: str = Depends(require_login), conn=Depends(
                                                confidence, quote, created_at FROM outreach_messages WHERE thread_id=%s ORDER BY id""",
                                      (t["id"],)).fetchall()
         t["escalations"] = conn.execute("SELECT * FROM escalations WHERE thread_id=%s ORDER BY id", (t["id"],)).fetchall()
+        t["meeting"] = conn.execute("SELECT * FROM meetings WHERE thread_id=%s ORDER BY id DESC LIMIT 1", (t["id"],)).fetchone()
+        t["holds"] = conn.execute("SELECT start_at, status FROM slot_holds WHERE thread_id=%s ORDER BY start_at", (t["id"],)).fetchall()
         out.append(t)
     return page(request, "pipeline.html", "pipeline", threads=out)
+
+
+@app.post("/pipeline/{thread_id}/{action}")
+def resolve(thread_id: int, action: str, user: str = Depends(require_login), conn=Depends(db)):
+    """Growth Lead resumes (the robot waits for the next reply) or closes an escalated scheduling conversation."""
+    if action not in ("resume", "close"):
+        raise HTTPException(400)
+    from agent.llm import LLM
+    from outreach.calendar_backend import GoogleCalendar
+    from outreach.sequence1 import notify_growth_lead
+    from outreach.sequence2 import Deps, gmail_send, resolve_escalation
+    deps = Deps(conn=conn, calendar=GoogleCalendar(), llm=LLM(), send=gmail_send, notify=notify_growth_lead)
+    resolve_escalation(deps, thread_id, action)
+    return RedirectResponse(f"/pipeline?msg=Conversation {thread_id}: {action}d.", status_code=303)
 
 
 @app.get("/questions", response_class=HTMLResponse)

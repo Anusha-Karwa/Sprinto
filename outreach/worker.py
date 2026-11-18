@@ -24,8 +24,17 @@ def run_once(conn, now: datetime | None = None, on_interested=None) -> dict:
         return r[0] if r else None
 
     reconciled = reconcile_sending(conn, search)
-    rep = tick(conn, inbox, LLM(), now=now, on_interested=on_interested)
+    llm = LLM()
+    rep = tick(conn, inbox, llm, now=now, on_interested=on_interested)
     rep["reconciled"] = reconciled
+    # Sequence 2 (LangGraph): start scheduling for newly interested threads, feed replies, fire 48 h timeouts.
+    from outreach.calendar_backend import GoogleCalendar
+    from outreach.sequence1 import notify_growth_lead
+    from outreach.sequence2 import Deps, gmail_send, process
+    deps = Deps(conn=conn, calendar=GoogleCalendar(), llm=llm, send=gmail_send, notify=notify_growth_lead,
+                **({"now": (lambda: now)} if now else {}))
+    s2 = process(deps)
+    rep["seq2_started"], rep["seq2_replies"], rep["seq2_timeouts"] = s2["started"], s2["replies"], s2["timeouts"]
     return rep
 
 
