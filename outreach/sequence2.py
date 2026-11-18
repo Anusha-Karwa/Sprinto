@@ -229,10 +229,13 @@ def build(deps: Deps):
     def propose_time(s: OutreachState) -> dict:
         now = deps.now()
         slots = s["free_slots"][: cfg2["slots_to_propose"]]
+        situation = ("They replied that they're open to a short intro call." if not s.get("reply_round")
+                     else "None of the earlier times worked for them, so these are new options.")
         f = run_llm(deps.llm, "write_times_framing",
-                    "Write 1-2 short, warm sentences introducing a few call times. No times, dates or links. JSON only.",
-                    f"Prospect: {s['prospect'].get('name')}. Round {s.get('reply_round', 0)} "
-                    f"({'first proposal' if not s.get('reply_round') else 'they asked for other times'}).", Framing, **kw(s))
+                    "You write the opening line(s) of a short scheduling email from a B2B salesperson. 1-2 plain sentences, "
+                    "friendly but not gushing, addressed by first name. Do NOT mention times, dates, links, 'proposal' or 'review'. "
+                    "The list of times is added after your text. JSON only.",
+                    f"First name: {s['prospect'].get('name')}. Situation: {situation}", Framing, **kw(s))
         framing = f.output.text if f.ok else f"Thanks {s['prospect'].get('name', '')}. Here are a few times that work on our side:"
         tool = prop_mod.make_tool(lambda subj, body, th, irt: deps.send(subj, body, th, irt, "proposal"),
                                   framing=framing, prospect_tz=s["prospect"].get("tz"), rejected=s.get("rejected_times", []),
@@ -488,8 +491,12 @@ def start(deps: Deps, graph, thread_row: dict, reply_text: str, sent_at: datetim
                 "email": info["email"], "tz": None, "tz_source": "unknown"}
     r = parse_reply(deps, reply_text, sent_at, [], {"conn": conn, "thread_ref": str(thread_row["id"])}) if reply_text else None
     proposed = resolve_times(r.times, prospect=prospect, single_tz_shown=None) if r else []
+    # Reuse the EXACT subject of the email we actually sent (incl. the [TEST → …] prefix) so mail clients keep one thread.
+    cold = conn.execute("""SELECT subject FROM outreach_messages WHERE thread_id=%s AND direction='out' AND kind='cold'
+                           AND subject IS NOT NULL ORDER BY id LIMIT 1""", (thread_row["id"],)).fetchone()
     st = initial_state(outreach_thread_id=thread_row["id"], prospect=prospect, gmail_thread_id=thread_row["gmail_thread_id"],
-                       last_message_id=rfc_message_id or "", subject=info["sent_subject"] or info["subject"] or "",
+                       last_message_id=rfc_message_id or "",
+                       subject=(cold or {}).get("subject") or info["sent_subject"] or info["subject"] or "",
                        proposed=proposed)
     graph.invoke(st, _cfg(thread_row["id"]))
     return sync_row(conn, graph, thread_row["id"])
