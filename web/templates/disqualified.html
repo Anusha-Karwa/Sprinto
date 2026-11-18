@@ -1,13 +1,23 @@
-{% extends "base.html" %}{% block body %}
-<h1>Was this really a no?</h1>
-<p class="muted">The robot only shows you the companies it liked. So every run, a random {{ pct }}% of the companies it turned down
-are shown here with its reasons. If you think one was a mistake, say so — that's the false-negative rate.</p>
-<div class="kpis"><div class="card kpi"><div class="muted small">Checked</div><div class="n">{{ answered }}</div></div>
-<div class="card kpi"><div class="muted small">False-negative rate</div><div class="n">{{ '%.0f%%'|format(100*fn_rate) if fn_rate is not none else '–' }}</div></div></div>
-{% for v in sample %}<div class="card"><h3><a href="/companies/{{ v.company_id }}">{{ v.domain }}</a> <span class="muted small">run {{ v.run_id }} · score {{ v.score }}</span></h3>
-<ul class="small">{% for r in v.reasons[:4] %}<li>{{ r }}</li>{% endfor %}</ul>
-<form method="post" action="/disqualified/{{ v.id }}">Was this really a no?
-<button name="really_no" value="yes">Yes, correct</button> <button name="really_no" value="no">No — we should have emailed them</button>
-{% if v.fn_check_answer is not none %}<span class="small muted">answered: {{ 'yes' if v.fn_check_answer else 'no (false negative)' }}</span>{% endif %}</form></div>
-{% else %}<p class="muted">No disqualified companies yet.</p>{% endfor %}
+{% extends "base.html" %}{% from "_ui.html" import icon, pill, stat, evidence, empty %}
+{% block subheading %}<div class="small muted">The robot only shows you companies it liked. So each run, {{ pct }}% of the ones it turned down come here.</div>{% endblock %}
+{% block body %}
+<div class="grid g4">
+  {{ stat('Spot-checked', answered) }}
+  {{ stat('False-negative rate', ('%.0f%%'|format(100*fn_rate)) if fn_rate is not none else '–', 'good leads it wrongly said no to') }}
+</div>
+<div class="stack section">
+{% for v in sample %}
+<div class="card">
+  <div class="card-head"><span class="icon-box">{{ icon('building') }}</span><div><h3><a href="/companies/{{ v.company_id }}">{{ v.domain }}</a></h3>
+    <div class="small muted">Run {{ v.run_id }} · fit score {{ v.score }}/100{% if v.short_circuit %} · stopped by rule: {{ v.short_circuit|replace('_',' ') }}{% endif %}</div></div>
+    <span class="spacer"></span>{{ pill('DISQUALIFIED') }}</div>
+  {% for r in v.reasons[:3] %}{{ evidence(r) }}{% endfor %}
+  <form method="post" action="/disqualified/{{ v.id }}" class="row" style="margin-top:12px">
+    <span class="small ink2">Was this really a no?</span>
+    <div class="seg"><button name="really_no" value="yes" class="{{ 'on' if v.fn_check_answer == true }}">{{ icon('check', 13) }} Yes, correct</button>
+      <button name="really_no" value="no" class="{{ 'on' if v.fn_check_answer == false }}">{{ icon('x', 13) }} No — we should email them</button></div>
+  </form>
+</div>
+{% else %}<div class="card">{{ empty('Nothing to spot-check', 'Rejected companies will be sampled here after each run.', 'scale') }}</div>{% endfor %}
+</div>
 {% endblock %}

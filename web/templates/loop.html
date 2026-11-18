@@ -1,17 +1,35 @@
-{% extends "base.html" %}{% block body %}
-<h1>Loop inspector</h1>
-<p class="muted">Debug order: Signal → Capture/Store → Retrieve → Apply. The highlighted text is exactly what was injected into the prompt.</p>
-{% for e in cards %}<div class="card">
-<h3>{{ e.domain }} · draft #{{ e.draft_id }} <span class="pill">{{ e.role_bucket }} / {{ e.size_bucket }}</span></h3>
-<p><b>1 · Signal:</b> {{ e.action }} · edit depth {{ '%.2f'|format(e.edit_depth or 0) }}{% if e.reason %} · reason: {{ e.reason }}{% endif %}</p>
-<ul class="small">{% for c in e.diff or [] %}<li>[{{ c.component }}] {{ c.op }}: <span class="muted">“{{ c.before }}”</span> → “{{ c.after }}”</li>{% endfor %}</ul>
-<p><b>2 · Capture/Store:</b></p><ul class="small">{% for l in e.learnings %}<li>#{{ l.id }} {{ l.learning }} <span class="muted">({{ l.status }}, support {{ l.support_count }})</span></li>
-{% else %}<li class="muted">no new learning (approved as-is, or merged into an existing one)</li>{% endfor %}</ul>
-<p><b>3 · Retrieve</b> (candidates for this draft, with ranks and drop reasons):</p>
-<div class="scroll"><table class="small"><tr><th></th><th>Learning</th><th>keyword rank</th><th>semantic rank</th><th>cosine</th><th>score</th><th>dropped because</th></tr>
-{% for r in e.retrieval %}<tr><td>{{ '✔' if r.selected else '' }}</td><td>{{ r.learning }}</td><td>{{ r.keyword_rank or '–' }}</td><td>{{ r.semantic_rank or '–' }}</td>
-<td>{{ '%.2f'|format(r.cosine or 0) }}</td><td>{{ '%.4f'|format(r.final_score or 0) }}</td><td class="muted">{{ r.drop_reason or '' }}</td></tr>
-{% else %}<tr><td colspan="7" class="muted">no candidates (no past learnings in this segment yet)</td></tr>{% endfor %}</table></div>
-<details><summary><b>4 · Apply</b> — the full prompt (injected block highlighted)</summary><pre style="white-space:pre-wrap" class="small">{{ e.prompt_html }}</pre></details>
-</div>{% else %}<p class="muted">No reviewed drafts yet.</p>{% endfor %}
+{% extends "base.html" %}{% from "_ui.html" import icon, pill, empty %}
+{% block subheading %}<div class="small muted">How your edits become lessons — in debug order: Signal → Capture → Retrieve → Apply</div>{% endblock %}
+{% block body %}
+{% for e in cards %}
+<div class="card">
+  <div class="card-head"><h3>{{ e.domain }} <span class="muted">· draft #{{ e.draft_id }}</span></h3><span class="spacer"></span>
+    <span class="pill pill-neutral">{{ (e.role_bucket or '')|upper }} · {{ e.size_bucket }}</span></div>
+  <div class="grid g2">
+    <div>
+      <div class="small muted">1 · Signal</div>
+      <div class="row" style="margin:4px 0 8px"><b>{{ {'approved_as_is':'Approved as-is','approved_edited':'Edited','rejected':'Rejected'}.get(e.action, e.action) }}</b>
+        <div class="meter-track" style="width:120px" data-tip="Edit depth {{ '%.2f'|format(e.edit_depth or 0) }}"><div class="meter-fill" style="width: {{ 100*(e.edit_depth or 0) }}%"></div></div>
+        <span class="small num">{{ (100*(e.edit_depth or 0))|round|int }}% changed</span></div>
+      {% for c in e.diff or [] %}<div class="small" style="margin:4px 0"><span class="pill pill-neutral">{{ c.component }}</span>
+        {% if c.before %}<del>{{ c.before }}</del>{% endif %} {% if c.after %}<ins>{{ c.after }}</ins>{% endif %}</div>{% endfor %}
+      {% if e.reason %}<div class="small ink2" style="margin-top:6px">Your reason: {{ e.reason }}</div>{% endif %}
+    </div>
+    <div>
+      <div class="small muted">2 · Capture → Store</div>
+      {% for l in e.learnings %}<div class="list-item" style="padding:6px 0"><span style="color:var(--accent-ink)">{{ icon('sparkles', 14) }}</span><div class="small"><b>{{ l.learning }}</b>
+        <div class="muted">{{ l.status|replace('_',' ') }} · seen {{ l.support_count }}×</div></div></div>
+      {% else %}<div class="small muted" style="margin-top:4px">No new lesson (approved as-is, or merged into an existing one).</div>{% endfor %}
+    </div>
+  </div>
+  <div class="section"><div class="small muted">3 · Retrieve — candidates considered for this draft</div>
+    {% if e.retrieval %}<div class="scroll"><table class="small"><thead><tr><th></th><th>Lesson</th><th class="num">keyword</th><th class="num">meaning</th><th class="num">score</th><th>dropped because</th></tr></thead><tbody>
+    {% for r in e.retrieval %}<tr><td>{% if r.selected %}<span style="color:var(--good-ink)">{{ icon('check', 14) }}</span>{% endif %}</td><td>{{ r.learning }}</td>
+      <td class="num">{{ r.keyword_rank or '–' }}</td><td class="num">{{ '%.2f'|format(r.cosine or 0) }}</td><td class="num">{{ '%.3f'|format(r.final_score or 0) }}</td><td class="muted">{{ r.drop_reason or '' }}</td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<div class="small muted">No candidates — no past lessons for this segment yet.</div>{% endif %}
+  </div>
+  <details class="section"><summary class="small"><b>4 · Apply</b> — the exact prompt, injected lessons highlighted</summary>
+    <pre class="mail small" style="margin-top:8px;background:var(--surface-2);padding:12px;border-radius:8px">{{ e.prompt_html }}</pre></details>
+</div>
+{% else %}<div class="card">{{ empty('Nothing to inspect yet', 'Each draft you approve, edit or reject shows up here with what was learned and reused.', 'loop') }}</div>{% endfor %}
 {% endblock %}

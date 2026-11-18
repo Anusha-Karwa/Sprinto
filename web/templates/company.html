@@ -1,24 +1,85 @@
-{% extends "base.html" %}{% block body %}
-<h1>{{ c.domain }} <span class="pill {{ c.status }}">{{ c.status }}</span></h1>
-{% if v %}
-<div class="card"><h3>Why: {{ v.verdict }} · {{ v.score }}/100</h3>
-<p class="small muted">{{ v.breakdown }}</p>
-<ul>{% for r in v.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
-{% if v.flags %}<p class="small muted">Flags: {{ v.flags|join(', ') }}</p>{% endif %}</div>
-{% endif %}
-{% if contacts %}<div class="card"><h3>Why this person</h3>{% for ct in contacts %}<p>{{ ct.rank_reason }}</p>{% endfor %}
-{% if ranking %}<p class="small muted">Everyone considered:</p><table class="small">{% for p in ranking.data %}<tr><td>{{ p.name or '(no name)' }}</td><td>{{ p.position or '–' }}</td>
-<td>conf {{ p.confidence }}</td><td>{% if p.rank %}#{{ p.rank }} {{ p.role }}{% else %}<span class="muted">excluded: {{ p.excluded }}</span>{% endif %}</td></tr>{% endfor %}</table>{% endif %}
-</div>{% endif %}
-<div class="card scroll"><h3>Pages read</h3><table><tr><th>URL</th><th>Type</th><th>Status</th><th>Tokens</th></tr>
-{% for p in pages %}<tr><td class="small">{{ p.url }}</td><td>{{ p.page_type }}</td><td class="{{ 'ok' if p.status=='ok' else 'FAILED' }}">{{ p.status }} {{ p.failure or '' }}</td><td>{{ p.clean_tokens }}</td></tr>{% endfor %}
-</table></div>
-{% if steps %}<div class="card"><h3>Research loop (the AI picks the page, code enforces the limit)</h3><ol>
-{% for s in steps %}<li><b>[{{ s.picked_by }}]</b> {{ s.pick }} for {{ s.target_question }} → {{ s.outcome }}{% if s.reason %}<br><span class="small muted">why: {{ s.reason }}</span>{% endif %}</li>{% endfor %}</ol></div>{% endif %}
-<div class="card scroll"><h3>Facts (✔ verified quote · ✘ rejected)</h3><table>
-{% for f in facts %}<tr><td>{{ '✔' if f.verified else '✘' }}</td><td>{{ f.field }}</td><td>{{ f.value.value }}</td><td class="small">“{{ f.quote }}”{% if not f.verified %}<br><span class="FAILED">{{ f.reject_reason }}</span>{% endif %}</td></tr>{% endfor %}
-</table></div>
-{% for d in drafts %}<div class="card"><h3>Email draft #{{ d.id }} <span class="pill {{ d.status }}">{{ d.status }}</span></h3>
-<p><b>{{ d.subject }}</b></p><pre style="white-space:pre-wrap;font:inherit">{{ d.body }}</pre>
-{% if d.sent_body and d.sent_body != d.body %}<p class="small muted">Sent version:</p><pre style="white-space:pre-wrap;font:inherit">{{ d.sent_body }}</pre>{% endif %}</div>{% endfor %}
+{% extends "base.html" %}{% from "_ui.html" import icon, pill, meter, evidence, empty %}
+{% block heading %}{{ c.domain }}{% endblock %}
+{% block subheading %}<div class="small muted"><a href="/runs/{{ c.run_id }}">Run {{ c.run_id }}</a> / {{ c.domain }} ·
+  <a href="https://{{ c.domain }}" target="_blank" rel="noopener">visit site {{ icon('link', 12) }}</a></div>{% endblock %}
+{% block actions %}<a class="btn" href="/doctor?company={{ c.domain }}">{{ icon('stethoscope', 16) }}Check with Doctor</a>{% endblock %}
+{% block body %}
+<div class="grid g-main">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2 style="margin:0">Why this verdict</h2><span class="spacer"></span>{{ pill(v.verdict if v else c.status) }}</div>
+      {% if v %}
+        {% if v.short_circuit %}
+          <p class="ink2" style="margin-top:0">Stopped early by a rule: <b>{{ v.short_circuit|replace('_',' ') }}</b>. No more research or credits spent.</p>
+        {% endif %}
+        {% for r in v.reasons %}{{ evidence(r) }}{% endfor %}
+        {% if v.flags %}<div class="row small" style="margin-top:12px">{% for f in v.flags %}<span class="pill pill-warning">{{ icon('alert', 12) }}{{ f|replace('_',' ') }}</span>{% endfor %}</div>{% endif %}
+      {% else %}{{ empty('No verdict yet', c.failure or 'This company is still queued.') }}{% endif %}
+    </div>
+
+    {% if contacts %}<div class="card">
+      <div class="card-head"><h2 style="margin:0">Why this person</h2></div>
+      {% for ct in contacts %}
+        <div class="list-item"><span class="icon-box {{ 'accent' if ct.rank == 1 else '' }}">{{ icon('user') }}</span>
+          <div><b>{{ ct.first_name }} {{ ct.last_name or '' }}</b> · {{ ct.position }} {% if ct.rank == 1 %}<span class="pill pill-info">primary</span>{% else %}<span class="pill pill-neutral">backup</span>{% endif %}
+          <div class="small ink2">{{ ct.rank_reason }}</div></div></div>
+      {% endfor %}
+      {% if ranking %}<details style="margin-top:10px"><summary class="small">Everyone considered ({{ ranking.data|length }})</summary>
+        <div class="scroll"><table class="small" style="margin-top:8px"><tbody>
+        {% for p in ranking.data %}<tr><td>{{ p.name or '(no name)' }}</td><td class="muted">{{ p.position or '–' }}</td><td class="num">{{ p.confidence }}%</td>
+          <td>{% if p.rank %}<span class="pill pill-info">#{{ p.rank }} {{ p.role|replace('_',' ') }}</span>{% else %}<span class="muted">{{ p.excluded }}</span>{% endif %}</td></tr>{% endfor %}
+        </tbody></table></div></details>{% endif %}
+    </div>{% endif %}
+
+    {% for d in drafts %}<div class="card">
+      <div class="card-head"><h2 style="margin:0">Email{% if drafts|length > 1 %} #{{ d.id }}{% endif %}</h2><span class="spacer"></span>{{ pill(d.status) }}</div>
+      <div class="small muted">Subject</div><div style="font-weight:600;margin-bottom:10px">{{ d.sent_subject or d.subject }}</div>
+      <pre class="mail">{{ d.sent_body or d.body }}</pre>
+      {% if d.hook_quote %}<div style="margin-top:12px" class="small"><span class="muted">Hook from their site:</span><blockquote>“{{ d.hook_quote }}”</blockquote></div>{% endif %}
+    </div>{% endfor %}
+
+    <div class="card">
+      <div class="card-head"><h2 style="margin:0">Facts the AI extracted</h2><span class="spacer"></span>
+        <label class="chip"><input type="checkbox" id="showRejected"> Show rejected</label></div>
+      <p class="small muted" style="margin-top:-6px">Every fact must quote the page it came from. Code checks the quote; anything it can't find is rejected.</p>
+      <div class="scroll"><table id="factTable"><tbody>
+      {% for f in facts %}<tr class="{{ 'rejected' if not f.verified }}" {% if not f.verified %}hidden{% endif %}>
+        <td style="width:24px">{% if f.verified %}<span style="color:var(--good-ink)">{{ icon('check', 16) }}</span>{% else %}<span style="color:var(--critical-ink)">{{ icon('x', 16) }}</span>{% endif %}</td>
+        <td class="small muted" style="white-space:nowrap">{{ f.field|replace('_',' ') }}</td><td><b>{{ f.value.value }}</b>
+          <div class="small ink2">“{{ f.quote }}”</div>{% if not f.verified %}<div class="small" style="color:var(--critical-ink)">{{ f.reject_reason }}</div>{% endif %}</td></tr>
+      {% else %}<tr><td class="muted">No facts.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+  </div>
+
+  <div class="stack">
+    {% if v %}<div class="card">
+      <div class="card-head"><h2 style="margin:0">Fit score</h2></div>
+      <div class="row" style="align-items:baseline;gap:6px"><span class="hero-num" style="font-size:44px">{{ v.score }}</span><span class="muted">/ 100</span></div>
+      <div class="small muted" style="margin-bottom:8px">60+ qualifies · 40–59 qualifies with a flag · fixed rules in code, not AI</div>
+      {% set b = v.breakdown or {} %}
+      {{ meter('Stage (Series A–C)', b.get('stage', 0), 35) }}
+      {{ meter('Compliance pressure', b.get('pressure', 0), 40) }}
+      {{ meter('Expansion gap', b.get('expansion_gap', 0), 15) }}
+      {{ meter('B2B clarity', b.get('b2b_clarity', 0), 10) }}
+      {% if v.unanswered %}<p class="small" style="color:var(--warning-ink);margin-bottom:0">{{ icon('alert', 14) }} Not found on the site: {{ v.unanswered|join(', ')|replace('_',' ') }}</p>{% endif %}
+    </div>{% endif %}
+
+    <div class="card">
+      <div class="card-head"><h2 style="margin:0">Research path</h2></div>
+      <div class="timeline">
+        {% for p in pages %}<div class="t-item t-{{ 'good' if p.status == 'ok' else 'critical' }}">
+          <a href="{{ p.url }}" target="_blank" rel="noopener" class="small">{{ p.url|host }}</a> <span class="pill pill-neutral">{{ p.page_type }}</span>
+          <div class="t-meta">{% if p.status == 'ok' %}{{ p.clean_tokens }} tokens kept{{ ' · via browser' if p.method == 'browser' }}{{ ' · from cache' if p.from_cache }}{% else %}{{ (p.failure or 'failed')|replace('_',' ') }}{% endif %}</div>
+          {% set st = steps|selectattr('pick','equalto',p.url)|first %}
+          {% if st %}<div class="small ink2">{{ icon('sparkles', 12) }} {{ 'AI' if st.picked_by == 'llm' else 'Fallback' }} picked this for {{ st.target_question|replace('_',' ') }}{% if st.reason %}: “{{ st.reason }}”{% endif %}</div>{% endif %}
+        </div>{% endfor %}
+      </div>
+      <p class="small muted" style="margin-bottom:0">The AI picks which page to read next; code caps it at 4 extra pages.</p>
+    </div>
+  </div>
+</div>
 {% endblock %}
+{% block scripts %}<script>
+document.getElementById('showRejected')?.addEventListener('change',e=>document.querySelectorAll('#factTable tr.rejected').forEach(r=>r.hidden=!e.target.checked));
+</script>{% endblock %}

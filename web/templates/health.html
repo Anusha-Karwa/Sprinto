@@ -1,30 +1,64 @@
-{% extends "base.html" %}{% block body %}
-<h1>Health</h1>
-<div class="card"><h3>Funnel — the headline is meetings booked</h3><table>
-{% for name, n in funnel %}<tr><td style="width:180px">{{ name }}</td><td style="width:60px"><b>{{ n }}</b></td>
-<td><div class="bar" style="width: {{ (100 * n / top)|round(1) }}%"></div></td></tr>{% endfor %}</table></div>
-<div class="kpis">
- <div class="card kpi"><div class="muted small">Hand-off rate (escalated / replied)</div><div class="n">{{ '%d%%'|format(100*handoff_rate) if handoff_rate is not none else '–' }}</div></div>
- <div class="card kpi"><div class="muted small">Time interested → booked</div><div class="n" style="font-size:20px">{{ t2b or '–' }}</div></div>
- <div class="card kpi"><div class="muted small">Avg proposal rounds</div><div class="n">{{ '%.1f'|format(rounds) if rounds else '–' }}</div></div>
- <div class="card kpi"><div class="muted small">Meetings worth 30 min</div><div class="n">{{ worth.y }} / {{ worth.n }}</div></div>
+{% extends "base.html" %}{% from "_ui.html" import icon, pill, stat, empty %}
+{% block subheading %}<div class="small muted">Is the robot doing its job — and should it keep running?</div>{% endblock %}
+{% block body %}
+<div class="grid g4">
+  {{ stat('Meetings booked', funnel[-1][1], 'the headline outcome') }}
+  {{ stat('Avg time per company', ('%.0f s'|format(costs.s)) if costs.s else '–', 'target < 120 s · manual 15–20 min', 'good' if costs.s and costs.s < 120 else None) }}
+  {{ stat('AI cost per company', ('$%.4f'|format(costs.c)) if costs.c else '–', ('total $%.3f'|format(costs.total)) if costs.total else '') }}
+  {{ stat('Hunter searches left', credits if credits is not none else '–', 'free plan, resets monthly', 'warning' if credits is not none and credits < 5 else None) }}
 </div>
-<div class="kpis">
- <div class="card kpi"><div class="muted small">Avg seconds per company (target &lt; 120)</div><div class="n">{{ '%.0f'|format(costs.s) if costs.s else '–' }}</div></div>
- <div class="card kpi"><div class="muted small">Avg LLM cost per company</div><div class="n">{{ '$%.4f'|format(costs.c) if costs.c else '–' }}</div></div>
- <div class="card kpi"><div class="muted small">Total LLM cost</div><div class="n">{{ '$%.3f'|format(costs.total) if costs.total else '–' }}</div></div>
- <div class="card kpi"><div class="muted small">Hunter searches left</div><div class="n">{{ credits if credits is not none else '–' }}</div></div>
+
+<div class="grid g-main section">
+  <div class="card">
+    <div class="card-head"><h2 style="margin:0">Funnel</h2><span class="spacer"></span>
+      <div class="seg"><button type="button" class="on" data-fv="chart">Chart</button><button type="button" data-fv="table">Table</button></div></div>
+    <div class="funnel" id="fChart" role="img" aria-label="Funnel">
+    {% for name, n in funnel %}{% set prev = funnel[loop.index0 - 1][1] if not loop.first else None %}
+      <div class="f-row{{ ' hero-row' if loop.last }}" data-tip="{{ name }}: {{ n }}{% if prev %} · {{ (100 * n / prev)|round|int }}% of previous{% endif %}">
+        <div class="f-label">{{ name }}</div><div><div class="f-bar" style="width: {{ (100 * n / top)|round(1) }}%"></div></div><div class="f-val">{{ n }}</div></div>
+    {% endfor %}</div>
+    <table id="fTable" hidden><thead><tr><th>Step</th><th class="num">Count</th><th class="num">vs previous</th></tr></thead><tbody>
+    {% for name, n in funnel %}{% set prev = funnel[loop.index0 - 1][1] if not loop.first else None %}
+      <tr><td>{{ name }}</td><td class="num">{{ n }}</td><td class="num">{{ ((100 * n / prev)|round|int ~ '%') if prev else '–' }}</td></tr>{% endfor %}</tbody></table>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2 style="margin:0">Kill criteria</h2></div>
+    <p class="small muted" style="margin-top:-6px">Decided before the build: if any is true, switch the robot off.</p>
+    {% set er = kill.edit_rate %}{% set rr = kill.rewrite_rate %}
+    <div class="list-item"><div style="flex:1"><b>Emails rewritten</b><div class="small muted">kill if &gt; 50% · target &lt; 20%</div></div>
+      {% if rr is none %}{{ pill('neutral', 'no reviews yet') }}{% elif rr > 0.5 %}{{ pill('failed', '%d%% — kill'|format(100*rr)) }}{% else %}{{ pill('ok', '%d%%'|format(100*rr)) }}{% endif %}</div>
+    <div class="list-item"><div style="flex:1"><b>Time per company</b><div class="small muted">kill if slower than by hand (15–20 min)</div></div>
+      {% if costs.s %}{{ pill('ok' if costs.s < 900 else 'failed', '%.0f s'|format(costs.s)) }}{% else %}{{ pill('neutral', '–') }}{% endif %}</div>
+    <div class="list-item"><div style="flex:1"><b>Right person (PoC accuracy)</b><div class="small muted">kill if &lt; 60% · checked by the Growth Lead</div></div>{{ pill('neutral', 'measured after calls') }}</div>
+    <div class="list-item"><div style="flex:1"><b>Meetings worth 30 min</b><div class="small muted">asked after every booked call</div></div>{{ pill('neutral' if not worth.n else 'ok', worth.y ~ ' / ' ~ worth.n) }}</div>
+  </div>
 </div>
-<div class="card scroll"><h3>Review loop by segment (latest window)</h3><table>
-<tr><th>Reviewer</th><th>Segment</th><th>n</th><th>Avg edit depth</th><th>Edit rate</th><th>Rejection rate</th><th>Disagreement</th></tr>
-{% for g in segs %}<tr><td>{{ g.user_id }}</td><td>{{ g.role_bucket }} / {{ g.size_bucket }}</td><td>{{ g.n }}</td><td>{{ '%.2f'|format(g.avg_edit_depth) }}</td>
-<td>{{ '%.0f%%'|format(100*g.edit_rate) }}</td><td>{{ '%.0f%%'|format(100*g.rejection_rate) }}</td><td>{{ '%.2f'|format(g.disagreement) }}</td></tr>
-{% else %}<tr><td colspan="7" class="muted">No reviews yet.</td></tr>{% endfor %}</table>
-<p class="small muted">Kill criterion: &gt; 50% of emails rewritten, PoC accuracy &lt; 60%, or slower than doing it by hand.</p></div>
-<div class="card scroll"><h3>Edit depth by week</h3><table><tr><th>Week</th><th>Reviews</th><th>Avg edit depth</th><th>Rejections</th></tr>
-{% for w in weekly %}<tr><td>{{ w.wk }}</td><td>{{ w.n }}</td><td>{{ '%.2f'|format(w.depth or 0) }}</td><td>{{ '%.0f%%'|format(100*(w.rej or 0)) }}</td></tr>
-{% else %}<tr><td colspan="4" class="muted">–</td></tr>{% endfor %}</table></div>
-<div class="card scroll"><h3>Alerts</h3><table>{% for a in alerts %}<tr><td class="small">{{ a.created_at.strftime('%d %b %H:%M') }}</td>
-<td class="{{ 'FAILED' if a.severity=='critical' else 'QUALIFIED_FLAGGED' }}">{{ a.gate }}</td><td class="small">{{ a.message }}</td>
-<td class="small muted">{{ 'emailed' if a.delivered else 'pending' }}</td></tr>{% else %}<tr><td class="muted">No alerts.</td></tr>{% endfor %}</table></div>
+
+<div class="grid g4 section">
+  {{ stat('Hand-off rate', ('%d%%'|format(100*handoff_rate)) if handoff_rate is not none else '–', 'replies escalated to you') }}
+  {{ stat('Interested → booked', t2b or '–', 'average time') }}
+  {{ stat('Proposal rounds', ('%.1f'|format(rounds)) if rounds else '–', 'cap: 2 counter-offers') }}
+  {{ stat('Reviews', kill.n_reviews, ('%d%% edited'|format(100*er)) if er is not none else '') }}
+</div>
+
+<div class="grid g2 section">
+  <div class="card"><h2>Review loop by segment</h2>
+    {% if segs %}<div class="scroll"><table><thead><tr><th>Segment</th><th class="num">n</th><th class="num">Edit depth</th><th class="num">Rejected</th><th class="num">Disagreement</th></tr></thead><tbody>
+    {% for g in segs %}<tr><td>{{ g.role_bucket|upper }} · {{ g.size_bucket }} <span class="muted small">{{ g.user_id }}</span></td><td class="num">{{ g.n }}</td>
+      <td class="num">{{ '%.2f'|format(g.avg_edit_depth) }}</td><td class="num">{{ '%.0f%%'|format(100*g.rejection_rate) }}</td><td class="num">{{ '%.2f'|format(g.disagreement) }}</td></tr>{% endfor %}
+    </tbody></table></div><p class="small muted">Disagreement sets how many past lessons are injected into the next draft.</p>
+    {% else %}{{ empty('No reviews yet', 'Turn review mode on and approve or edit a few drafts.', 'loop') }}{% endif %}
+  </div>
+  <div class="card"><h2>Alerts</h2>
+    {% for a in alerts %}<div class="list-item"><span class="icon-box {{ 'warning' }}">{{ icon('alert' if a.severity != 'critical' else 'x-circle') }}</span>
+      <div style="flex:1"><b>{{ a.gate|replace('_',' ') }}</b><div class="small ink2">{{ a.message }}</div></div>
+      <div class="small muted" style="text-align:right"><span data-time="{{ a.created_at.isoformat() }}">{{ a.created_at|ago }}</span><br>{{ 'emailed' if a.delivered else 'pending' }}</div></div>
+    {% else %}{{ empty('No alerts', 'Silent failures — a stopped inbox checker, a lesson that was never used — would show up here and in your inbox.', 'check-circle') }}{% endfor %}
+  </div>
+</div>
 {% endblock %}
+{% block scripts %}<script>
+document.querySelectorAll('[data-fv]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-fv]').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('fChart').hidden=b.dataset.fv!=='chart'; document.getElementById('fTable').hidden=b.dataset.fv!=='table'}));
+</script>{% endblock %}

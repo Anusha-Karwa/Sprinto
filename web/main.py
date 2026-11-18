@@ -24,17 +24,20 @@ from agent.db import connect, migrate
 
 app = FastAPI(title="Sprinto Outbound", docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+from web.ui import register as _register_filters  # noqa: E402
+_register_filters(templates.env)
 security = HTTPBasic()
 BUDGET_SECONDS = float(os.environ.get("PROCESS_BUDGET_SECONDS", "200"))   # Hobby limit is 300 s; leave room for one company
 _migrated = False
 
 
-def db():
+def db(request: Request):
     global _migrated
     if not _migrated:
         migrate(verbose=False)          # idempotent; runs once per cold start
         _migrated = True
     conn = connect()
+    request.state.conn = conn           # lets page() add the sidebar badges without every route passing it
     try:
         yield conn
     finally:
@@ -50,9 +53,34 @@ def require_login(creds: HTTPBasicCredentials = Depends(security)) -> str:
     return creds.username or settings().reviewer_id
 
 
+TITLES = {"home": "Overview", "runs": "Runs", "review": "Review queue", "pipeline": "Pipeline", "questions": "Questions for you",
+          "health": "Health", "disqualified": "Was this really a no?", "loop": "Loop inspector", "doctor": "Doctor"}
+
+
+def chrome(conn) -> dict:
+    """Sidebar badges (what needs the Growth Lead) + inbox-checker status, on every page."""
+    if conn is None:
+        return {"badges": {}, "worker_mins": None, "worker_ok": False}
+    one = lambda sql: conn.execute(sql).fetchone()["n"]  # noqa: E731
+    badges = {
+        "review": one("SELECT count(*) n FROM drafts WHERE status IN ('pending_review','needs_human_edit') AND user_id IS NOT NULL"),
+        "escalations": one("SELECT count(*) n FROM escalations WHERE status='open'"),
+        "active": one("SELECT count(*) n FROM outreach_threads WHERE status='active'"),
+        "questions": one("SELECT count(*) n FROM feedback_events WHERE needs_reason"),
+        "queued": one("SELECT count(*) n FROM companies WHERE status IN ('queued','processing')"),
+        "fn_check": one("SELECT count(*) n FROM verdicts WHERE verdict='DISQUALIFIED' AND fn_check_answer IS NULL"),
+    }
+    hb = conn.execute("SELECT EXTRACT(EPOCH FROM now() - ticked_at)/60 AS m FROM worker_heartbeats WHERE worker='sequence1'").fetchone()
+    mins = round(float(hb["m"])) if hb else None
+    return {"badges": badges, "worker_mins": mins,
+            "worker_ok": mins is not None and mins <= outreach_cfg()["gates"]["worker_stale_minutes"]}
+
+
 def page(request: Request, name: str, nav: str, **ctx) -> HTMLResponse:
-    return templates.TemplateResponse(request, name, {"title": nav.title(), "nav": nav, "my_email": settings().my_email,
-                                                      "flash": request.query_params.get("msg"), **ctx})
+    base = {"title": TITLES.get(nav, nav.title()), "nav": nav, "my_email": settings().my_email,
+            "review_mode": settings().review_mode, "flash": request.query_params.get("msg"),
+            **chrome(getattr(request.state, "conn", None))}
+    return templates.TemplateResponse(request, name, {**base, **ctx})
 
 
 # ---------------- health + schedule ----------------
@@ -100,28 +128,53 @@ def _drain(conn, run_id: int | None = None):
 def home(request: Request, user: str = Depends(require_login), conn=Depends(db)):
     one = lambda sql: conn.execute(sql).fetchone()["n"]  # noqa: E731
     k = {"meetings": one("SELECT count(*) n FROM meetings"),
-         "replies": one("SELECT count(*) n FROM outreach_messages WHERE direction='in'"),
-         "sent": one("SELECT count(*) n FROM drafts WHERE status='sent'"),
+         "emailed": one("SELECT count(*) n FROM outreach_threads WHERE gmail_thread_id IS NOT NULL"),
+         "replied": one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in' AND kind='reply'"),
          "companies": one("SELECT count(*) n FROM companies WHERE status NOT IN ('queued','processing')"),
          "qualified": one("SELECT count(DISTINCT company_id) n FROM verdicts WHERE verdict IN ('QUALIFIED','QUALIFIED_FLAGGED')"),
-         "pending": one("SELECT count(*) n FROM drafts WHERE status IN ('pending_review','needs_human_edit')")}
-    hb = conn.execute("SELECT EXTRACT(EPOCH FROM now() - ticked_at)/60 AS mins FROM worker_heartbeats WHERE worker='sequence1'").fetchone()
-    mins = round(float(hb["mins"])) if hb else None
-    stale = outreach_cfg()["gates"]["worker_stale_minutes"]
-    tracked = one("SELECT count(*) n FROM outreach_threads WHERE status='active' AND gmail_thread_id IS NOT NULL")
-    return page(request, "home.html", "home", k=k, review_mode=settings().review_mode, worker_mins=mins,
-                worker_stale=(mins is None or mins > stale), stale_limit=stale, tracked=tracked)
+         "reviewed": one("SELECT count(*) n FROM feedback_events"),
+         "edited": one("SELECT count(*) n FROM feedback_events WHERE action <> 'approved_as_is'")}
+    secs = conn.execute("SELECT avg(seconds) s FROM companies WHERE seconds IS NOT NULL").fetchone()["s"]
+    k["avg_secs"] = round(float(secs)) if secs else None
+    k["reply_rate"] = round(100 * k["replied"] / k["emailed"]) if k["emailed"] else None
+    k["edit_rate"] = round(100 * k["edited"] / k["reviewed"]) if k["reviewed"] else None
+    funnel = _funnel(conn)
+    upcoming = conn.execute("""SELECT m.*, c.domain FROM meetings m JOIN companies c ON c.id=m.company_id
+                               WHERE m.start_at > now() - interval '1 hour' ORDER BY m.start_at LIMIT 3""").fetchall()
+    activity = conn.execute("""
+        (SELECT m.created_at AS at, c.domain, m.direction, m.kind, m.classification, m.reply_intent, t.id AS thread_id, NULL::text AS note
+           FROM outreach_messages m JOIN outreach_threads t ON t.id=m.thread_id JOIN companies c ON c.id=t.company_id)
+        UNION ALL
+        (SELECT v.created_at, c.domain, 'verdict', v.verdict, NULL, NULL, NULL, v.score::text
+           FROM verdicts v JOIN companies c ON c.id=v.company_id)
+        ORDER BY at DESC LIMIT 10""").fetchall()
+    return page(request, "home.html", "home", k=k, funnel=funnel, upcoming=upcoming, activity=activity)
+
+
+def _funnel(conn) -> list[tuple[str, int]]:
+    one = lambda sql: conn.execute(sql).fetchone()["n"]  # noqa: E731
+    return [
+        ("Researched", one("SELECT count(*) n FROM companies WHERE status NOT IN ('queued','processing')")),
+        ("Qualified", one("SELECT count(DISTINCT company_id) n FROM verdicts WHERE verdict IN ('QUALIFIED','QUALIFIED_FLAGGED')")),
+        ("Emailed", one("SELECT count(*) n FROM outreach_threads WHERE gmail_thread_id IS NOT NULL")),
+        ("Replied", one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in' AND kind='reply'")),
+        ("Interested", one("SELECT count(*) n FROM outreach_threads WHERE sequence=2")),
+        ("Times proposed", one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE kind='proposal'")),
+        ("Meetings booked", one("SELECT count(*) n FROM meetings")),
+    ]
 
 
 @app.post("/check-inbox")
-def check_inbox(user: str = Depends(require_login), conn=Depends(db)):
+def check_inbox(request: Request, user: str = Depends(require_login), conn=Depends(db)):
     from outreach.worker import run_once
     rep = run_once(conn)
     done = [f"{gid}: {what}" for gid, what in rep["processed"]]
     msg = (f"Inbox checked. {len(done)} new repl{'y' if len(done) == 1 else 'ies'} handled"
            + (": " + "; ".join(r for _, r in rep["processed"]) if done else "") +
            (f". Closed for no reply: {len(rep['closed_no_reply'])}" if rep["closed_no_reply"] else "") + ".")
-    return RedirectResponse(f"/?msg={msg}", status_code=303)
+    back = request.headers.get("referer") or "/"
+    sep = "&" if "?" in back else "?"
+    return RedirectResponse(f"{back.split('?')[0]}{sep}msg={msg}", status_code=303)
 
 
 @app.post("/runs")
@@ -167,6 +220,13 @@ def run_detail(run_id: int, request: Request, user: str = Depends(require_login)
                 avg=round(sum(secs) / len(secs)) if secs else 0, cost=sum(float(r.get("cost") or 0) for r in rows))
 
 
+@app.get("/runs/{run_id}/status.json")
+def run_status(run_id: int, user: str = Depends(require_login), conn=Depends(db)):
+    r = conn.execute("""SELECT count(*) n, count(*) FILTER (WHERE status IN ('queued','processing')) left_,
+                               count(*) FILTER (WHERE status='processing') busy FROM companies WHERE run_id=%s""", (run_id,)).fetchone()
+    return {"total": r["n"], "left": r["left_"], "processing": r["busy"], "done": r["n"] - r["left_"]}
+
+
 @app.post("/runs/{run_id}/process")
 def run_process(run_id: int, user: str = Depends(require_login), conn=Depends(db)):
     rows = _drain(conn, run_id)
@@ -204,7 +264,12 @@ def review(request: Request, user: str = Depends(require_login), conn=Depends(db
         ids = list(d["injected_learning_ids"] or [])
         d["learnings"] = conn.execute("SELECT learning FROM learnings WHERE id = ANY(%s)", (ids,)).fetchall() if ids else []
         out.append(d)
-    return page(request, "review.html", "review", drafts=out, user=reviewer, chips=feedback_cfg()["reason_chips"],
+    focus_id = request.query_params.get("id")
+    focus = next((d for d in out if str(d["id"]) == focus_id), out[0] if out else None)
+    if focus:
+        from agent.config import sprinto_facts
+        focus["ctas"] = sprinto_facts()["cta_options"]
+    return page(request, "review.html", "review", drafts=out, focus=focus, user=reviewer, chips=feedback_cfg()["reason_chips"],
                 now=time.time())
 
 
@@ -250,7 +315,11 @@ def pipeline(request: Request, user: str = Depends(require_login), conn=Depends(
         t["meeting"] = conn.execute("SELECT * FROM meetings WHERE thread_id=%s ORDER BY id DESC LIMIT 1", (t["id"],)).fetchone()
         t["holds"] = conn.execute("SELECT start_at, status FROM slot_holds WHERE thread_id=%s ORDER BY start_at", (t["id"],)).fetchall()
         out.append(t)
-    return page(request, "pipeline.html", "pipeline", threads=out)
+    cols = [("To reply", ("contacted",), "mail"), ("Scheduling", ("interested", "scheduling"), "calendar"),
+            ("Meeting booked", ("meeting_booked",), "check-circle"), ("With you", ("handed_off",), "alert"),
+            ("Closed", ("closed_not_interested", "closed_no_reply", "unsubscribed"), "x-circle")]
+    columns = [{"title": t, "icon": ic, "items": [x for x in out if (x.get("stage") or "contacted") in st]} for t, st, ic in cols]
+    return page(request, "pipeline.html", "pipeline", threads=out, columns=columns)
 
 
 @app.post("/pipeline/{thread_id}/{action}")
@@ -272,15 +341,7 @@ def resolve(thread_id: int, action: str, user: str = Depends(require_login), con
 @app.get("/health", response_class=HTMLResponse)
 def health(request: Request, user: str = Depends(require_login), conn=Depends(db)):
     one = lambda sql, *a: conn.execute(sql, a).fetchone()  # noqa: E731
-    funnel = [
-        ("Companies researched", one("SELECT count(*) n FROM companies WHERE status NOT IN ('queued','processing')")["n"]),
-        ("Qualified", one("SELECT count(DISTINCT company_id) n FROM verdicts WHERE verdict IN ('QUALIFIED','QUALIFIED_FLAGGED')")["n"]),
-        ("Emailed", one("SELECT count(*) n FROM outreach_threads WHERE gmail_thread_id IS NOT NULL")["n"]),
-        ("Replied", one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in' AND kind='reply'")["n"]),
-        ("Interested", one("SELECT count(*) n FROM outreach_threads WHERE sequence=2")["n"]),
-        ("Times proposed", one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE kind='proposal'")["n"]),
-        ("Meetings booked", one("SELECT count(*) n FROM meetings")["n"]),
-    ]
+    funnel = _funnel(conn)
     top = max(1, funnel[0][1])
     replied = one("SELECT count(DISTINCT thread_id) n FROM outreach_messages WHERE direction='in'")["n"]
     handoff = one("SELECT count(DISTINCT thread_id) n FROM escalations")["n"]
@@ -304,7 +365,10 @@ def health(request: Request, user: str = Depends(require_login), conn=Depends(db
         mins = int(td.total_seconds() // 60)
         d, h, m = mins // 1440, (mins % 1440) // 60, mins % 60
         return " ".join(x for x in (f"{d} d" if d else "", f"{h} h" if h else "", f"{m} min") if x)
-    return page(request, "health.html", "health", funnel=funnel, top=top,
+    edit = one("SELECT count(*) n, count(*) FILTER (WHERE action <> 'approved_as_is') e, count(*) FILTER (WHERE action='rejected') r FROM feedback_events")
+    kill = {"edit_rate": (edit["e"] / edit["n"]) if edit["n"] else None,
+            "rewrite_rate": (edit["r"] / edit["n"]) if edit["n"] else None, "n_reviews": edit["n"]}
+    return page(request, "health.html", "health", funnel=funnel, top=top, kill=kill,
                 handoff_rate=(handoff / replied) if replied else None, t2b=human(t2b), rounds=rounds, costs=costs, worth=worth,
                 segs=segs, weekly=weekly, alerts=alerts, credits=hunter_credits())
 

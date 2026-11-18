@@ -1,9 +1,21 @@
-{% extends "base.html" %}{% block body %}
-<h1>Doctor</h1>
-<p class="muted">Layered checks in debug order. The first FAIL in a section is where to start, with the next question to ask.</p>
-<form method="get"><input type="text" name="company" placeholder="company domain (optional, e.g. spendflo.com)" value="{{ company }}" style="max-width:360px">
-<button>Check</button></form>
-{% for name, checks in sections %}<div class="card"><h3>{{ name }}</h3><table>
-{% for c in checks %}<tr><td class="{{ 'ok' if c.ok else 'FAILED' }}"><b>{{ 'PASS' if c.ok else 'FAIL' }}</b></td><td>{{ c.layer }}</td>
-<td class="small">{{ c.evidence }}{% if not c.ok %}<br><b>Next question:</b> {{ c.next_question }}{% endif %}</td></tr>{% endfor %}</table></div>{% endfor %}
+{% extends "base.html" %}{% from "_ui.html" import icon, pill %}
+{% block subheading %}<div class="small muted">Checks every layer in order and stops at the first failure — with the next question to ask</div>{% endblock %}
+{% block actions %}<form method="get" class="row"><input type="search" name="company" placeholder="Company, e.g. spendflo.com" value="{{ company }}" style="width:240px"><button class="btn btn-primary">{{ icon('stethoscope', 15) }}Run checks</button></form>{% endblock %}
+{% block body %}
+<div class="grid g3">
+{% for name, checks in sections %}
+  {% set failed = checks|rejectattr('ok')|list %}
+  <div class="card">
+    <div class="card-head"><h2 style="margin:0">{{ name }}</h2><span class="spacer"></span>{{ pill('failed' if failed else 'ok', 'Problem found' if failed else 'All good') }}</div>
+    <div class="timeline">
+    {% for c in checks %}
+      <div class="t-item t-{{ 'good' if c.ok else 'critical' }}"><div class="small"><b>{{ c.layer }}</b></div>
+        <div class="small ink2">{{ c.evidence }}</div>
+        {% if not c.ok %}<div class="small" style="margin-top:4px;color:var(--critical-ink)">{{ icon('help', 13) }} Next question: {{ c.next_question }}</div>{% endif %}</div>
+    {% endfor %}
+    </div>
+  </div>
+{% endfor %}
+</div>
+<p class="small muted section">Same checks from a terminal: <code>python -m agent.doctor --user anu --company spendflo.com</code></p>
 {% endblock %}

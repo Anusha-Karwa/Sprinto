@@ -1,32 +1,134 @@
-{% extends "base.html" %}{% block body %}
-<h1>Review queue <span class="muted small">reviewer: {{ user }}</span></h1>
-{% for d in drafts %}
-<div class="card">
-  <h3>{{ d.first_name }} {{ d.last_name or '' }} · {{ d.position }} @ <a href="/companies/{{ d.company_id }}">{{ d.domain }}</a> <span class="muted small">(draft #{{ d.id }})</span></h3>
-  <div class="grid">
-    <div>
-      {% if d.v %}<p><b>{{ d.v.verdict }} · {{ d.v.score }}/100</b></p><ul class="small">{% for r in d.v.reasons[:6] %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
-      {% if d.rank_reason %}<p class="small"><b>Why this person:</b> {{ d.rank_reason }}</p>{% endif %}
-      <p class="small"><b>Pain points</b></p><ul class="small">{% for p in d.pain_points or [] %}<li>{{ p.pain }}<br><span class="muted">evidence: “{{ p.evidence_quote }}”</span></li>{% endfor %}</ul>
-      <p class="small"><b>Hook</b> ({{ d.hook_type }}): “{{ d.hook_quote }}” · <b>Capability:</b> {{ d.capability_id }}</p>
-      {% if d.learnings %}<p class="small"><b>{{ d.learnings|length }} learning(s) from your past edits were used:</b></p><ul class="small">{% for l in d.learnings %}<li>{{ l.learning }}</li>{% endfor %}</ul>
-      {% else %}<p class="small muted">No learnings injected yet for this segment.</p>{% endif %}
-      {% if d.lint and not d.lint.ok %}<p class="small FAILED">Lint: {{ d.lint.problems|join('; ') }}</p>{% endif %}
+{% extends "base.html" %}{% from "_ui.html" import icon, pill, evidence, empty %}
+{% block subheading %}<div class="small muted">You're the Growth Lead: check the reasoning, then approve, edit or reject. Edits teach the robot.</div>{% endblock %}
+{% block head %}<style>.review-layout{grid-template-columns:240px minmax(0,1fr);align-items:start}.review-layout > .grid{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}@media (max-width:1250px){.review-layout{grid-template-columns:1fr}.review-layout > .grid{grid-template-columns:1fr}}</style>{% endblock %}
+{% block actions %}<button class="btn btn-ghost" data-open="keys">{{ icon('keyboard', 16) }}Shortcuts</button>{% endblock %}
+{% block body %}
+{% if not focus %}
+<div class="card">{{ empty('Nothing to review', 'Queue companies with review mode on and their drafts appear here. Nothing is sent to a prospect without your approval.', 'check-circle') }}</div>
+{% else %}
+<div class="grid review-layout">
+  <div class="card" style="padding:10px">
+    <div class="small muted" style="padding:6px 8px">{{ drafts|length }} waiting</div>
+    {% for d in drafts %}
+    <a class="queue-item{{ ' on' if d.id == focus.id }}" href="/review?id={{ d.id }}">
+      <div class="row" style="justify-content:space-between;gap:6px"><b>{{ d.domain }}</b>{% if d.status == 'needs_human_edit' %}<span style="color:var(--warning-ink)">{{ icon('alert', 14) }}</span>{% endif %}</div>
+      <div class="small muted">{{ d.first_name }} · {{ d.position }}</div>
+    </a>{% endfor %}
+  </div>
+
+  <div class="grid g2" style="align-items:start">
+    <!-- evidence -->
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><span class="icon-box accent">{{ icon('building') }}</span><div><h3><a href="/companies/{{ focus.company_id }}">{{ focus.domain }}</a></h3>
+          <div class="small muted">{% if focus.v %}Fit score {{ focus.v.score }}/100{% endif %}</div></div><span class="spacer"></span>{% if focus.v %}{{ pill(focus.v.verdict) }}{% endif %}</div>
+        {% if focus.v %}{% for r in focus.v.reasons[:4] %}{{ evidence(r) }}{% endfor %}{% endif %}
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="icon-box">{{ icon('user') }}</span><div><h3>{{ focus.first_name }} {{ focus.last_name or '' }}</h3><div class="small muted">{{ focus.position }}</div></div></div>
+        <p class="small ink2" style="margin:0">{{ focus.rank_reason }}</p>
+      </div>
+      <div class="card">
+        <h2>Why it's written this way</h2>
+        {% for p in focus.pain_points or [] %}<div class="evidence"><div class="evidence-head"><b>Pain {{ loop.index }}</b></div>
+          <div class="small">{{ p.pain }}</div><blockquote>“{{ p.evidence_quote }}”</blockquote></div>{% endfor %}
+        <div class="small" style="margin-top:8px"><span class="muted">Hook ({{ (focus.hook_type or '')|replace('_',' ') }}):</span> “{{ focus.hook_quote }}”</div>
+        <div class="small" style="margin-top:6px"><span class="muted">Sprinto claim used:</span> <code>{{ focus.capability_id }}</code> — from the approved facts list only</div>
+        {% if focus.learnings %}<div style="margin-top:12px"><div class="small muted">{{ icon('loop', 13) }} Lessons from your past edits used here:</div>
+          <ul class="small" style="margin:6px 0 0;padding-left:18px">{% for l in focus.learnings %}<li>{{ l.learning }}</li>{% endfor %}</ul></div>{% endif %}
+      </div>
     </div>
-    <form method="post" action="/review/{{ d.id }}">
+
+    <!-- editor -->
+    <form class="card" method="post" action="/review/{{ focus.id }}" id="reviewForm" data-busy="Sending & learning…"
+          data-original-subject="{{ focus.subject }}" data-original-body="{{ focus.body }}" data-first="{{ focus.first_name }}">
       <input type="hidden" name="shown_at" value="{{ now }}">
-      <p class="small muted">Subject</p><input type="text" name="subject" value="{{ d.subject }}">
-      <p class="small muted">Body</p><textarea name="body">{{ d.body }}</textarea>
-      <p class="small muted">Reason (optional for edits, required to reject)</p>
-      {% for chip in chips %}<label class="chip"><input type="checkbox" name="chips" value="{{ chip }}"> {{ chip }}</label>{% endfor %}
-      <input type="text" name="reason" placeholder="Why? (free text)" style="margin-top:6px">
-      <p style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="primary" name="action" value="approve">Approve as-is</button>
-        <button name="action" value="edit">Approve with edits</button>
-        <button name="action" value="reject">Reject (rewrite)</button>
-      </p>
+      <div class="card-head"><h2 style="margin:0">Email</h2><span class="spacer"></span>
+        <div class="seg" role="tablist"><button type="button" class="on" data-view="edit">{{ icon('edit', 13) }} Edit</button><button type="button" data-view="diff">{{ icon('diff', 13) }} My changes <span class="kbd">D</span></button></div></div>
+      <div class="small muted">To: {{ focus.first_name }} {{ focus.last_name or '' }} — <b>actually sent to {{ my_email }}</b></div>
+      <label class="field" for="subj">Subject <span class="muted" id="subjCount"></span></label>
+      <input type="text" name="subject" id="subj" value="{{ focus.subject }}">
+      <label class="field" for="body">Body <span class="muted" id="bodyCount"></span></label>
+      <textarea name="body" id="body" rows="13">{{ focus.body }}</textarea>
+      <div id="diffView" hidden class="card" style="box-shadow:none;background:var(--surface-2);margin-top:8px"><pre class="mail" id="diffOut"></pre></div>
+
+      <div style="margin:12px 0 4px" class="small muted">Rules (checked live)</div>
+      <div class="grid g2" id="checks" style="gap:0 16px"></div>
+
+      <label class="field">Why? <span class="muted">(optional for edits, required to reject — the robot learns from it)</span></label>
+      <div class="row" style="gap:6px">{% for c in chips %}<label class="chip"><input type="checkbox" name="chips" value="{{ c }}">{{ c }}</label>{% endfor %}</div>
+      <input type="text" name="reason" id="reason" placeholder="Anything else? e.g. 'too formal for a founder'" style="margin-top:8px">
+
+      <div class="row" style="margin-top:16px">
+        <button class="btn btn-primary" name="action" value="approve" id="btnApprove">{{ icon('send', 14) }}Approve as-is <span class="kbd">A</span></button>
+        <button class="btn" name="action" value="edit" id="btnEdit" disabled>{{ icon('edit', 14) }}Approve with edits <span class="kbd">E</span></button>
+        <button class="btn btn-ghost btn-danger" name="action" value="reject" id="btnReject">{{ icon('x', 14) }}Reject <span class="kbd">R</span></button>
+        <span class="spacer" style="flex:1"></span>
+        <button class="btn btn-ghost btn-sm" type="button" id="btnReset" hidden>{{ icon('undo', 14) }}Undo my edits</button>
+      </div>
     </form>
   </div>
 </div>
-{% else %}<p class="muted">Nothing to review. Queue companies with review mode on to fill this.</p>{% endfor %}
+{% endif %}
 {% endblock %}
+{% block scripts %}{% if focus %}<script>
+(function(){
+  const f=document.getElementById('reviewForm'), subj=document.getElementById('subj'), body=document.getElementById('body');
+  const O={s:f.dataset.originalSubject, b:f.dataset.originalBody}, first=f.dataset.first;
+  const ctas={{ focus.ctas|tojson }};
+  const words=t=>(t.trim().match(/\S+/g)||[]).length;
+  const rules=[
+    ['Greets '+first+' on the first line', ()=> (body.value.trim().split('\n')[0]||'').toLowerCase().includes(first.toLowerCase())],
+    ['Body ≤ 120 words', ()=> words(body.value)<=120],
+    ['Subject ≤ 7 words', ()=> words(subj.value)<=7],
+    ['No links', ()=> !/(https?:\/\/|www\.|\b[\w-]+\.(com|io|ai|co|app|so)\b)/i.test(body.value+subj.value)],
+    ['No days, times or calendar', ()=> !/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|calendar|\d{1,2}(:\d{2})?\s?(am|pm))\b/i.test(body.value)],
+    ['No exclamation marks', ()=> !/!/.test(body.value+subj.value)],
+    ['No [placeholders]', ()=> !/\[[^\]]+\]|\{\{/.test(body.value+subj.value)],
+    ['Soft call-to-action kept', ()=> ctas.some(c=>body.value.toLowerCase().includes(c.toLowerCase()))],
+  ];
+  const checks=document.getElementById('checks');
+  const ok='<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>';
+  const bad='<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+  function update(){
+    checks.innerHTML=rules.map(([t,fn])=>{const p=fn(); return `<div class="check ${p?'ok':'bad'}">${p?ok:bad}${t}</div>`}).join('');
+    document.getElementById('bodyCount').textContent='· '+words(body.value)+' / 120 words';
+    document.getElementById('subjCount').textContent='· '+words(subj.value)+' / 7 words';
+    const changed = subj.value!==O.s || body.value.replace(/\r/g,'')!==O.b.replace(/\r/g,'');
+    document.getElementById('btnEdit').disabled=!changed;
+    document.getElementById('btnApprove').disabled=changed;      // approve-as-is sends exactly the draft, so it's off once you edit
+    document.getElementById('btnApprove').title=changed?'You changed the text — use "Approve with edits"':'';
+    document.getElementById('btnReset').hidden=!changed;
+    if(!document.getElementById('diffView').hidden) renderDiff();
+  }
+  // word-level diff (LCS) for the "My changes" view
+  function diff(a,b){ a=a.split(/(\s+)/); b=b.split(/(\s+)/); const n=a.length,m=b.length, L=Array.from({length:n+1},()=>new Int32Array(m+1));
+    for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)L[i][j]=a[i]===b[j]?L[i+1][j+1]+1:Math.max(L[i+1][j],L[i][j+1]);
+    let i=0,j=0,out=''; const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    while(i<n&&j<m){ if(a[i]===b[j]){out+=esc(a[i]);i++;j++} else if(L[i+1][j]>=L[i][j+1]){out+='<del>'+esc(a[i])+'</del>';i++} else {out+='<ins>'+esc(b[j])+'</ins>';j++} }
+    while(i<n)out+='<del>'+esc(a[i++])+'</del>'; while(j<m)out+='<ins>'+esc(b[j++])+'</ins>'; return out }
+  function renderDiff(){ document.getElementById('diffOut').innerHTML = '<b>'+diff(O.s, subj.value)+'</b>\n\n'+diff(O.b.replace(/\r/g,''), body.value.replace(/\r/g,'')) }
+  function view(v){ document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+    const d=v==='diff'; document.getElementById('diffView').hidden=!d; body.hidden=d; subj.hidden=d; if(d) renderDiff() }
+  document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>view(b.dataset.view)));
+  subj.addEventListener('input',update); body.addEventListener('input',update);
+  document.getElementById('btnReset').addEventListener('click',()=>{subj.value=O.s; body.value=O.b; update()});
+  // reject needs a reason; approvals confirm the real recipient
+  f.addEventListener('submit',e=>{ const a=e.submitter?.value;
+    if(a==='reject' && !f.querySelector('[name=chips]:checked') && !document.getElementById('reason').value.trim()){
+      e.preventDefault(); e.stopImmediatePropagation(); document.getElementById('reason').focus(); document.getElementById('reason').placeholder='Please say why you are rejecting it'; return }
+    if(a!=='reject' && !f.dataset.ok){ e.preventDefault(); e.stopImmediatePropagation();
+      ask(a==='edit'?'Send your edited email?':'Send this email?', 'It goes to {{ my_email }} (standing in for {{ focus.first_name }}), and the robot learns from '+(a==='edit'?'your changes.':'your approval.'),
+          ()=>{ f.dataset.ok=1; f.requestSubmit(e.submitter) }) }
+  }, true);
+  document.addEventListener('shortcut',e=>{ const k=e.detail;
+    if(k==='a' && !document.getElementById('btnApprove').disabled) document.getElementById('btnApprove').click();
+    if(k==='e' && !document.getElementById('btnEdit').disabled) document.getElementById('btnEdit').click();
+    if(k==='r') document.getElementById('btnReject').click();
+    if(k==='d') view(document.getElementById('diffView').hidden?'diff':'edit');
+    if(k==='j'||k==='k'){ const items=[...document.querySelectorAll('.queue-item')], i=items.findIndex(x=>x.classList.contains('on'));
+      const n=items[i+(k==='j'?1:-1)]; if(n) location.href=n.href }
+  });
+  update();
+})();
+</script>{% endif %}{% endblock %}

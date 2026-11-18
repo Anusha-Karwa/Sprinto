@@ -1,16 +1,53 @@
-{% extends "base.html" %}{% block body %}
-<h1>Run {{ run.id }}</h1>
-<p class="muted">{{ done }} of {{ rows|length }} companies processed · average {{ avg }}s per company · LLM cost ${{ '%.4f'|format(cost) }}</p>
-{% if queued %}
-<form method="post" action="/runs/{{ run.id }}/process"><button class="primary">Process the next companies ({{ queued }} queued)</button>
-<span class="small muted">Each click runs for up to ~4 minutes; the background schedule also picks them up.</span></form>
-{% endif %}
-<div class="card scroll"><table>
-<tr><th>Company</th><th>Status</th><th>Score</th><th>Person</th><th>Sent</th><th>Flags</th><th>Cost</th><th>Seconds</th><th>Note</th></tr>
-{% for r in rows %}
-<tr><td><a href="/companies/{{ r.company_id }}">{{ r.domain }}</a></td><td class="{{ r.status }}">{{ r.status }}</td><td>{{ r.score if r.score is not none else '–' }}</td>
-<td>{{ r.poc or '–' }}</td><td>{{ r.sent }}</td><td class="small">{{ r.flags|join(', ') or '–' }}</td><td>${{ '%.4f'|format(r.cost) }}</td>
-<td>{{ r.seconds }}</td><td class="small">{{ r.note }}</td></tr>
-{% endfor %}
-</table></div>
+{% extends "base.html" %}{% from "_ui.html" import icon, pill, stat %}
+{% block heading %}Run {{ run.id }}{% endblock %}
+{% block subheading %}<div class="small muted"><a href="/runs">Runs</a> / Run {{ run.id }} · started <span data-time="{{ run.started_at.isoformat() }}">{{ run.started_at|ago }}</span></div>{% endblock %}
+{% block actions %}
+{% if queued %}<form method="post" action="/runs/{{ run.id }}/process" data-busy="Researching… (up to ~4 min)"><button class="btn btn-primary">{{ icon('play', 14) }}Process next companies</button></form>{% endif %}
 {% endblock %}
+{% block body %}
+<div class="grid g4">
+  {{ stat('Processed', done ~ ' / ' ~ rows|length, (queued ~ ' still queued') if queued else 'complete', 'info' if queued else 'good') }}
+  {{ stat('Qualified', rows|selectattr('status','in',['sent','pending_review','needs_human_edit','needs_manual_poc','dry_run','drafted','QUALIFIED','QUALIFIED_FLAGGED'])|list|length) }}
+  {{ stat('Avg time per company', (avg ~ 's') if avg else '–', 'target < 120 s', 'good' if avg and avg < 120 else None) }}
+  {{ stat('AI cost', '$%.4f'|format(cost), 'whole run') }}
+</div>
+{% if queued %}<div class="card" id="progressCard" style="margin-top:16px">
+  <div class="row small" style="justify-content:space-between;margin-bottom:8px"><span><span class="spin" style="color:var(--accent)"></span> <span id="progText">{{ done }} of {{ rows|length }} done</span></span>
+  <span class="muted">Updates live · the schedule also picks queued companies up every 5 min</span></div>
+  <div class="progress"><div id="progBar" style="width: {{ (100 * done / rows|length) if rows else 0 }}%"></div></div>
+</div>{% endif %}
+
+<div class="card" style="margin-top:16px">
+  <div class="row" style="margin-bottom:12px">
+    <div style="position:relative;flex:1;min-width:200px;max-width:320px">
+      <input type="search" placeholder="Filter companies…" data-filter="#runTable" aria-label="Filter companies"></div>
+    <span class="chip on" data-status-chip="" data-target="#runTable">All</span>
+    <span class="chip" data-status-chip="good" data-target="#runTable">Good</span>
+    <span class="chip" data-status-chip="warning" data-target="#runTable">Needs attention</span>
+    <span class="chip" data-status-chip="neutral" data-target="#runTable">Not a fit</span>
+    <span class="chip" data-status-chip="critical" data-target="#runTable">Failed</span>
+  </div>
+  <div class="scroll"><table id="runTable">
+  <thead><tr><th>Company</th><th>Status</th><th style="width:140px">Fit score</th><th>Person</th><th>Flags</th><th class="num">Time</th><th class="num">Cost</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr data-tone="{{ r.status|tone }}">
+    <td><a href="/companies/{{ r.company_id }}"><b>{{ r.domain }}</b></a>{% if r.note %}<div class="small muted" style="max-width:340px">{{ r.note[:150] }}</div>{% endif %}</td>
+    <td>{{ pill(r.status) }}</td>
+    <td>{% if r.score is not none %}<div class="row" style="gap:8px;flex-wrap:nowrap" data-tip="Fit score {{ r.score }}/100 (60+ = qualified)">
+        <div class="meter-track" style="width:70px"><div class="meter-fill" style="width: {{ r.score }}%"></div></div><span class="num small">{{ r.score }}</span></div>{% else %}<span class="muted">–</span>{% endif %}</td>
+    <td class="small">{{ r.poc or '–' }}</td>
+    <td class="small muted">{{ (r.flags or [])|join(', ')|replace('_',' ') or '–' }}</td>
+    <td class="num small">{{ r.seconds ~ 's' if r.seconds else '–' }}</td>
+    <td class="num small">{{ '$%.4f'|format(r.cost or 0) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}
+{% block scripts %}{% if queued %}<script>
+(function(){ const bar=document.getElementById('progBar'), txt=document.getElementById('progText'); let last={{ done }};
+  const t=setInterval(async()=>{ try{ const r=await fetch('/runs/{{ run.id }}/status.json'); const s=await r.json();
+    bar.style.width=(100*s.done/Math.max(1,s.total))+'%'; txt.textContent=s.done+' of '+s.total+' done';
+    if(s.done!==last){ last=s.done; if(!s.left){ clearInterval(t); location.reload() } } }catch(e){} }, 5000); })();
+</script>{% endif %}{% endblock %}

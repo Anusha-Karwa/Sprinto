@@ -1,31 +1,74 @@
-{% extends "base.html" %}{% block body %}
-<h1>Pipeline</h1>
-<p class="muted">Every email thread the robot is handling: its state, every message with the robot's reading, and the CRM stage.</p>
-{% for t in threads %}
-<div class="card">
-  <h3>{{ t.first_name or '' }} {{ t.last_name or '' }} · {{ t.position or '' }} @ {{ t.domain }}
-    <span class="pill">{{ t.stage or 'no CRM stage' }}</span> <span class="pill">{{ t.status }}</span></h3>
-  <p class="small">reply_status <b>{{ t.reply_status }}</b> · sequence {{ t.sequence }} · current step <b>{{ t.current_node }}</b>
-   · reply deadline {{ t.deadline_at.strftime('%d %b %H:%M UTC') if t.deadline_at else '–' }}
-   {% if t.gmail_thread_id %}· <a href="https://mail.google.com/mail/u/0/#all/{{ t.gmail_thread_id }}">thread in Gmail</a>{% endif %}</p>
-  {% if t.crm_reason %}<p class="small muted">CRM reason: {{ t.crm_reason }}</p>{% endif %}
-  {% if t.prospect_proposed_times %}<p class="small">Times they suggested: {{ t.prospect_proposed_times|join(', ') }}</p>{% endif %}
-  <div class="scroll"><table>
-  {% for m in t.messages %}<tr><td class="small">{{ m.created_at.strftime('%d %b %H:%M') }}</td><td>{{ '→ out' if m.direction=='out' else '← in' }} {{ m.kind or '' }}</td>
-  <td class="small">{% if m.direction=='in' %}{{ m.body }}{% else %}{{ m.subject }}{% endif %}</td>
-  <td class="small">{% if m.classification %}<b>{{ m.classification }}</b>/{{ m.reply_intent }} ({{ '%.2f'|format(m.confidence or 0) }})<br>“{{ m.quote }}”{% endif %}</td></tr>{% endfor %}
-  </table></div>
-  {% if t.meeting %}<p class="ok"><b>Meeting booked:</b> {{ t.meeting.start_at.strftime('%a %d %b %H:%M UTC') }}
-     · <a href="{{ t.meeting.meet_link }}">Meet link</a></p>
-     <form method="post" action="/meetings/{{ t.meeting.id }}/worth" class="small">Was this meeting worth 30 minutes?
-       <button name="worth" value="yes">Yes</button> <button name="worth" value="no">No</button>
-       {% if t.meeting.worth_30_min is not none %}<span class="muted">answered: {{ 'yes' if t.meeting.worth_30_min else 'no' }}</span>{% endif %}</form>{% endif %}
-  {% if t.holds %}<p class="small muted">Slots: {% for h in t.holds %}{{ h.start_at.strftime('%a %d %b %H:%M UTC') }} ({{ h.status }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
-  {% for e in t.escalations %}<p class="QUALIFIED_FLAGGED small">Escalated: {{ e.reason }} ({{ e.status }})</p>
-    {% if e.status == 'open' and t.sequence == 2 and t.current_node == 'escalated' %}
-    <form method="post" style="display:inline" action="/pipeline/{{ t.id }}/resume"><button>Resume (wait for their next reply)</button></form>
-    <form method="post" style="display:inline" action="/pipeline/{{ t.id }}/close"><button>Close</button></form>{% endif %}
-  {% endfor %}
+{% extends "base.html" %}{% from "_ui.html" import icon, pill, empty %}
+{% block subheading %}<div class="small muted">Every conversation the robot is handling. Click a card for the full story.</div>{% endblock %}
+{% block actions %}<form method="post" action="/check-inbox" data-busy="Checking…"><button class="btn">{{ icon('refresh', 14) }}Check inbox now</button></form>{% endblock %}
+{% block body %}
+{% if not threads %}<div class="card">{{ empty('No conversations yet', 'Approve an email in the Review queue — its thread appears here and is watched for replies.', 'kanban') }}</div>
+{% else %}
+<div class="kanban">
+{% for col in columns %}
+  <div class="col">
+    <div class="col-head">{{ icon(col.icon, 15) }}{{ col.title }}<span class="badge">{{ col['items']|length }}</span></div>
+    {% for t in col['items'] %}
+      <button class="k-card" type="button" data-open="t{{ t.id }}">
+        <div class="row" style="justify-content:space-between;gap:6px;flex-wrap:nowrap"><b title="{{ t.domain }}">{{ t.domain }}</b>{% if t.escalations|selectattr('status','equalto','open')|list %}<span style="color:var(--warning-ink)">{{ icon('alert', 14) }}</span>{% endif %}</div>
+        <div class="small muted">{{ t.first_name or '' }} {{ t.last_name or '' }} · {{ t.position or '' }}</div>
+        <div class="row small" style="margin-top:8px;gap:6px">
+          <span class="pill pill-neutral">{{ icon('clock', 12) }}{{ t.current_node|node_label }}</span>
+          {% if t.meeting %}<span class="pill pill-good">{{ icon('calendar', 12) }}{{ t.meeting.start_at.strftime('%d %b %H:%M') }}</span>{% endif %}
+        </div>
+        <div class="t-meta" style="margin-top:6px" data-time="{{ t.updated_at.isoformat() }}">{{ t.updated_at|ago }}</div>
+      </button>
+    {% else %}<div class="small muted" style="padding:6px">—</div>{% endfor %}
+  </div>
+{% endfor %}
 </div>
-{% else %}<p class="muted">No threads yet. Approve an email in the Review queue to start one.</p>{% endfor %}
+
+{% for t in threads %}
+<dialog class="drawer" id="t{{ t.id }}">
+  <div class="dlg-body" style="overflow:auto;height:calc(100vh - 70px)">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ t.domain }}</h2>{{ pill(t.stage or 'contacted') }}</div>
+    <div class="small muted" style="margin:4px 0 14px">{{ t.first_name or '' }} {{ t.last_name or '' }} · {{ t.position or '' }}
+      {% if t.gmail_thread_id %} · <a href="https://mail.google.com/mail/u/0/#all/{{ t.gmail_thread_id }}" target="_blank" rel="noopener">open in Gmail {{ icon('link', 12) }}</a>{% endif %}</div>
+
+    {% if t.meeting %}<div class="card" style="box-shadow:none;background:var(--good-soft);border-color:transparent">
+      <b>{{ icon('calendar', 16) }} Meeting booked — {{ t.meeting.start_at.strftime('%a %d %b, %H:%M UTC') }}</b>
+      <div class="row" style="margin-top:10px">{% if t.meeting.meet_link %}<a class="btn btn-sm" href="{{ t.meeting.meet_link }}" target="_blank" rel="noopener">{{ icon('link', 14) }}Join Meet</a>
+        <button class="btn btn-sm btn-ghost" type="button" data-copy="{{ t.meeting.meet_link }}">{{ icon('copy', 14) }}Copy link</button>{% endif %}</div>
+      <form method="post" action="/meetings/{{ t.meeting.id }}/worth" class="row small" style="margin-top:12px">After the call — was it worth 30 minutes?
+        <div class="seg"><button name="worth" value="yes" class="{{ 'on' if t.meeting.worth_30_min == true }}">Yes</button><button name="worth" value="no" class="{{ 'on' if t.meeting.worth_30_min == false }}">No</button></div></form>
+    </div>{% endif %}
+
+    {% for e in t.escalations if e.status == 'open' %}<div class="card" style="box-shadow:none;background:var(--warning-soft);border-color:var(--warning);margin-top:12px">
+      <b>{{ icon('alert', 16) }} Handed to you</b><p class="small" style="margin:6px 0 10px">{{ e.reason }}</p>
+      {% if t.sequence == 2 and t.current_node == 'escalated' %}<div class="row">
+        <form method="post" action="/pipeline/{{ t.id }}/resume" data-busy="Resuming…"><button class="btn btn-sm btn-primary">{{ icon('play', 13) }}I replied — resume</button></form>
+        <form method="post" action="/pipeline/{{ t.id }}/close" data-confirm="The robot stops handling this conversation." data-confirm-title="Close this conversation?"><button class="btn btn-sm">{{ icon('x', 13) }}Close</button></form></div>
+      {% else %}<div class="small muted">Reply to them yourself from the thread in Gmail.</div>{% endif %}
+    </div>{% endfor %}
+
+    <h3 style="margin:18px 0 10px">Conversation</h3>
+    <div class="timeline">
+    {% for m in t.messages %}
+      <div class="t-item t-{{ 'good' if m.direction == 'in' else 'info' }}">
+        <div class="small"><b>{{ 'They replied' if m.direction == 'in' else {'cold':'Cold email sent','proposal':'Times proposed','confirmation':'Confirmation sent'}.get(m.kind, 'Email sent') }}</b>
+          <span class="t-meta" data-time="{{ m.created_at.isoformat() }}">· {{ m.created_at|ago }}</span></div>
+        {% if m.direction == 'in' %}<blockquote>{{ (m.body or '').split('\nOn ')[0][:400] }}</blockquote>
+          {% if m.classification %}<div class="small ink2">Read as <b>{{ m.classification|replace('_',' ') }}</b>{% if m.reply_intent and m.reply_intent != 'none' %} · {{ m.reply_intent|replace('_',' ') }}{% endif %}
+            · {{ (100 * (m.confidence or 0))|round|int }}% sure{% if m.quote %} — because “{{ m.quote }}”{% endif %}</div>{% endif %}
+        {% else %}<div class="small muted">{{ m.subject or '' }}</div>{% endif %}
+      </div>
+    {% endfor %}
+    {% if t.holds %}<div class="t-item"><div class="small"><b>Slots</b></div>
+      {% for h in t.holds %}<span class="pill {{ 'pill-good' if h.status == 'booked' else 'pill-neutral' }}" style="margin:2px">{{ h.start_at.strftime('%a %d %b %H:%M UTC') }} · {{ h.status }}</span>{% endfor %}</div>{% endif %}
+    </div>
+
+    <details style="margin-top:8px"><summary class="small">State (for debugging)</summary>
+      <table class="small"><tbody><tr><td class="muted">reply_status</td><td>{{ t.reply_status }}</td></tr><tr><td class="muted">sequence</td><td>{{ t.sequence }}</td></tr>
+      <tr><td class="muted">current step</td><td>{{ t.current_node }}</td></tr><tr><td class="muted">reply deadline</td><td>{{ t.deadline_at.strftime('%d %b %H:%M UTC') if t.deadline_at else '–' }}</td></tr>
+      <tr><td class="muted">CRM reason</td><td>{{ t.crm_reason or '–' }}</td></tr></tbody></table></details>
+  </div>
+  <div class="dlg-foot"><button class="btn" data-close>Close</button></div>
+</dialog>
+{% endfor %}
+{% endif %}
 {% endblock %}

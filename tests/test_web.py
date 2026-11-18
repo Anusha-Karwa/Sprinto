@@ -48,7 +48,7 @@ def test_queue_then_process_then_report(client, test_db, monkeypatch):
     ok = client.get("/api/cron/process", headers={"Authorization": "Bearer cs"})
     assert ok.status_code == 200 and [d for d, _ in ok.json()["processed"]] == ["acme.io", "beta.com"]
     page = client.get(f"/runs/{run_id}", headers=AUTH)
-    assert page.status_code == 200 and "acme.io" in page.text and "DISQUALIFIED" in page.text
+    assert page.status_code == 200 and "acme.io" in page.text and "Not a fit" in page.text
     assert test_db.execute("SELECT finished_at FROM runs WHERE id=%s", (run_id,)).fetchone()["finished_at"] is not None
 
 
@@ -76,7 +76,7 @@ def test_home_shows_inbox_checker_and_button(client, test_db, monkeypatch):
     r = client.get("/", headers=AUTH)
     assert "never been checked" in r.text and "Check inbox now" in r.text
     test_db.execute("INSERT INTO worker_heartbeats (worker, ticked_at) VALUES ('sequence1', now() - interval '3 minutes')")
-    assert "Last checked 3 minutes ago" in client.get("/", headers=AUTH).text
+    assert "Last checked 3 min ago" in client.get("/", headers=AUTH).text
     import outreach.worker as w
     monkeypatch.setattr(w, "run_once", lambda conn: {"processed": [("m1", "not_interested")], "closed_no_reply": [], "skipped": []})
     r = client.post("/check-inbox", headers=AUTH, follow_redirects=False)
@@ -84,7 +84,7 @@ def test_home_shows_inbox_checker_and_button(client, test_db, monkeypatch):
 
 
 def test_pipeline_page(client, test_db):
-    assert "No threads yet" in client.get("/pipeline", headers=AUTH).text
+    assert "No conversations yet" in client.get("/pipeline", headers=AUTH).text
 
 
 @pytest.mark.parametrize("path", ["/health", "/disqualified", "/loop", "/doctor", "/doctor?company=acme.io", "/pipeline"])
@@ -99,7 +99,7 @@ def test_disqualified_sample_and_answer(client, test_db):
         cid = test_db.execute("INSERT INTO companies (run_id, domain, status) VALUES (1,%s,'DISQUALIFIED') RETURNING id", (f"d{i}.io",)).fetchone()["id"]
         test_db.execute("INSERT INTO verdicts (company_id, verdict, score, reasons) VALUES (%s,'DISQUALIFIED',10,'[\"low score\"]')", (cid,))
     page = client.get("/disqualified", headers=AUTH).text
-    assert page.count("Was this really a no?") == 3            # 1 heading + ceil(10% of 12) = 2 sampled
+    assert page.count('name="really_no" value="yes"') == 2      # ceil(10% of 12) = 2 sampled
     vid = test_db.execute("SELECT id FROM verdicts LIMIT 1").fetchone()["id"]
     client.post(f"/disqualified/{vid}", data={"really_no": "no"}, headers=AUTH)
     assert "100%" in client.get("/disqualified", headers=AUTH).text   # 1 checked, 1 false negative
@@ -109,6 +109,7 @@ def test_health_and_doctor_with_data(client, test_db):
     from tests.test_simulations import simulate
     simulate(test_db)
     h = client.get("/health", headers=AUTH).text
-    assert "Meetings booked" in h and "<b>3</b>" in h
+    assert "Meetings booked" in h and 'stat-value">3<' in h
     d = client.get("/doctor", headers=AUTH).text
-    assert "Agent" in d and "FAIL" not in d.split("<h3>Agent</h3>")[1]
+    agent_card = d.split(">Agent</h2>")[1].split("</div>\n  </div>")[0]
+    assert "All good" in agent_card and "Problem found" not in agent_card

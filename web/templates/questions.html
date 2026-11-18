@@ -1,13 +1,14 @@
-{% extends "base.html" %}{% block body %}
-<h1>Questions for you</h1>
-<p class="muted">The loop never guesses why a fact was corrected, or when it's unsure. These learnings wait for your answer.</p>
+{% extends "base.html" %}{% from "_ui.html" import icon, empty %}
+{% block subheading %}<div class="small muted">The robot never guesses why you corrected a fact. These lessons wait for your answer.</div>{% endblock %}
+{% block body %}
 {% for q in qs %}
-<div class="card"><p><b>#{{ q.id }}</b> {{ q.ask_why }}</p>
-<details><summary class="small">What you changed</summary><pre style="white-space:pre-wrap;font:inherit" class="small">DRAFT:
-{{ q.situation.draft.body if q.situation.draft else '' }}
-
-SENT:
-{{ q.situation.sent.body if q.situation.sent else '' }}</pre></details>
-<form method="post" action="/questions/{{ q.id }}"><input type="text" name="answer" placeholder="Your answer"><p><button class="primary">Save answer</button></p></form></div>
-{% else %}<p class="muted">No open questions.</p>{% endfor %}
+<div class="card">
+  <div class="row"><span class="icon-box warning">{{ icon('help') }}</span><b>{{ q.ask_why }}</b></div>
+  <details style="margin:12px 0"><summary class="small">What you changed</summary>
+    <div class="grid g2" style="margin-top:8px"><div><div class="small muted">Draft</div><pre class="mail small">{{ q.situation.draft.body if q.situation.draft else '' }}</pre></div>
+    <div><div class="small muted">You sent</div><pre class="mail small">{{ q.situation.sent.body if q.situation.sent else '' }}</pre></div></div></details>
+  <form method="post" action="/questions/{{ q.id }}" class="row" data-busy="Saving…"><input type="text" name="answer" placeholder="e.g. the draft had the wrong customer count" style="flex:1;min-width:220px" required>
+    <button class="btn btn-primary">Save answer</button></form>
+</div>
+{% else %}<div class="card">{{ empty('No open questions', 'When you change a fact or the robot is unsure why you edited something, it asks here instead of guessing.', 'check-circle') }}</div>{% endfor %}
 {% endblock %}

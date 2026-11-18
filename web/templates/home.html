@@ -1,29 +1,86 @@
-{% extends "base.html" %}{% block body %}
-<h1>Overview</h1>
-<div class="kpis">
-  <div class="card kpi"><div class="muted small">Meetings booked (headline)</div><div class="n">{{ k.meetings }}</div></div>
-  <div class="card kpi"><div class="muted small">Replies</div><div class="n">{{ k.replies }}</div></div>
-  <div class="card kpi"><div class="muted small">Emails sent</div><div class="n">{{ k.sent }}</div></div>
-  <div class="card kpi"><div class="muted small">Qualified / researched</div><div class="n">{{ k.qualified }} / {{ k.companies }}</div></div>
-  <div class="card kpi"><div class="muted small">Waiting for review</div><div class="n">{{ k.pending }}</div></div>
-</div>
-<p class="muted small">Emails sent is activity, not outcome. The number that matters is meetings booked.</p>
-<div class="card">
-  <h3>Inbox checker</h3>
-  {% if worker_mins is none %}<p class="FAILED">The inbox has never been checked. Is the schedule (cron-job.org) set up?</p>
-  {% elif worker_stale %}<p class="FAILED">Last checked {{ worker_mins }} minutes ago — more than {{ stale_limit }}. The schedule may have stopped.</p>
-  {% else %}<p class="ok">Last checked {{ worker_mins }} minute{{ '' if worker_mins == 1 else 's' }} ago (schedule running).</p>{% endif %}
-  <p class="small muted">{{ tracked }} email thread(s) are being watched for replies.</p>
-  <form method="post" action="/check-inbox"><button>Check inbox now</button></form>
-</div>
-<div class="card">
-  <h3>Start a run</h3>
-  <form method="post" action="/runs">
-    <p class="small muted">One website per line (e.g. spendflo.com). Companies are queued and processed a few at a time.</p>
-    <textarea name="domains" style="min-height:120px" placeholder="spendflo.com&#10;zenduty.com"></textarea>
-    <p><label><input type="checkbox" name="dry_run" value="1"> Dry run (don't send, just draft)</label></p>
-    <button class="primary">Queue these companies</button>
-  </form>
-  <p class="small muted">Review mode is <b>{{ review_mode }}</b>: {{ 'drafts wait in the Review queue' if review_mode=='on' else 'qualified emails are sent straight to ' ~ my_email }}.</p>
+{% extends "base.html" %}{% from "_ui.html" import icon, pill, stat, empty %}
+{% block subheading %}<div class="small muted">Research → qualify → right person → personal email → reply → booked call</div>{% endblock %}
+{% block body %}
+<div class="grid g-main">
+  <div class="stack">
+    <div class="card">
+      <div class="hero">
+        <div>
+          <div class="stat-label">Meetings booked</div>
+          <div class="hero-num">{{ k.meetings }}</div>
+          <div class="small muted" style="margin-top:6px">The outcome that matters. Emails sent is activity, not outcome.</div>
+        </div>
+        <div class="grid g2">
+          {{ stat('Reply rate', (k.reply_rate|string ~ '%') if k.reply_rate is not none else '–', k.replied ~ ' of ' ~ k.emailed ~ ' emailed') }}
+          {{ stat('Time per company', (k.avg_secs|string ~ 's') if k.avg_secs else '–', 'target < 2 min · manual 15–20 min',
+                  ('good' if k.avg_secs and k.avg_secs < 120 else None)) }}
+          {{ stat('Emails rewritten', (k.edit_rate|string ~ '%') if k.edit_rate is not none else '–', 'target < 20%',
+                  ('good' if k.edit_rate is not none and k.edit_rate < 20 else ('warning' if k.edit_rate is not none else None))) }}
+          {{ stat('Qualified', k.qualified ~ ' / ' ~ k.companies, 'companies researched', href='/runs') }}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 style="margin:0">Funnel</h2><span class="spacer"></span><a class="small" href="/health">Health {{ icon('chevron', 14) }}</a></div>
+      {% set top = [funnel[0][1], 1]|max %}
+      <div class="funnel" role="img" aria-label="Funnel from researched to meetings booked">
+      {% for name, n in funnel %}
+        {% set prev = funnel[loop.index0 - 1][1] if not loop.first else None %}
+        <div class="f-row{{ ' hero-row' if loop.last }}" data-tip="{{ name }}: {{ n }}{% if prev %} · {{ (100 * n / prev)|round|int }}% of previous step{% endif %}">
+          <div class="f-label">{{ name }}</div>
+          <div><div class="f-bar" style="width: {{ (100 * n / top)|round(1) }}%"></div></div>
+          <div class="f-val">{{ n }}</div>
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 style="margin:0">Recent activity</h2></div>
+      {% if activity %}<div class="timeline">
+      {% for a in activity %}
+        {% if a.direction == 'verdict' %}
+          <div class="t-item t-{{ a.kind|tone }}"><b>{{ a.domain }}</b> researched — {{ pill(a.kind) }} <span class="muted">{{ a.note }}/100</span>
+            <div class="t-meta" data-time="{{ a.at.isoformat() }}">{{ a.at|ago }}</div></div>
+        {% elif a.direction == 'in' %}
+          <div class="t-item t-good"><b>{{ a.domain }}</b> replied{% if a.classification %} — read as <b>{{ a.classification|replace('_',' ') }}</b>{% if a.reply_intent and a.reply_intent not in ('none',) %} / {{ a.reply_intent|replace('_',' ') }}{% endif %}{% endif %}
+            <div class="t-meta" data-time="{{ a.at.isoformat() }}">{{ a.at|ago }}</div></div>
+        {% else %}
+          <div class="t-item t-info">{{ {'cold':'Cold email sent to','proposal':'Meeting times proposed to','confirmation':'Meeting confirmed with'}.get(a.kind, 'Email to') }} <b>{{ a.domain }}</b>
+            <div class="t-meta" data-time="{{ a.at.isoformat() }}">{{ a.at|ago }}</div></div>
+        {% endif %}
+      {% endfor %}</div>
+      {% else %}{{ empty('Nothing yet', 'Start a run to research your first companies.') }}{% endif %}
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2 style="margin:0">Needs you</h2></div>
+      {% set any = badges.review or badges.escalations or badges.questions or badges.fn_check %}
+      {% if badges.review %}<a class="list-item" href="/review"><span class="icon-box accent">{{ icon('inbox') }}</span><div><b>{{ badges.review }} email{{ 's' if badges.review != 1 }} to review</b><div class="small muted">Nothing reaches a prospect without you</div></div><span class="spacer"></span>{{ icon('chevron', 16) }}</a>{% endif %}
+      {% if badges.escalations %}<a class="list-item" href="/pipeline"><span class="icon-box warning">{{ icon('alert') }}</span><div><b>{{ badges.escalations }} conversation{{ 's' if badges.escalations != 1 }} handed to you</b><div class="small muted">Unclear reply, referral or no answer</div></div>{{ icon('chevron', 16) }}</a>{% endif %}
+      {% if badges.questions %}<a class="list-item" href="/questions"><span class="icon-box warning">{{ icon('help') }}</span><div><b>{{ badges.questions }} question{{ 's' if badges.questions != 1 }} about your edits</b><div class="small muted">The robot won't guess why a fact changed</div></div>{{ icon('chevron', 16) }}</a>{% endif %}
+      {% if badges.fn_check %}<a class="list-item" href="/disqualified"><span class="icon-box">{{ icon('scale') }}</span><div><b>{{ badges.fn_check }} rejected compan{{ 'ies' if badges.fn_check != 1 else 'y' }} to spot-check</b><div class="small muted">Catch the good leads it said no to</div></div>{{ icon('chevron', 16) }}</a>{% endif %}
+      {% if not any %}{{ empty('All clear', 'Nothing is waiting for you right now.', 'check-circle') }}{% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 style="margin:0">Upcoming meetings</h2></div>
+      {% for m in upcoming %}
+        <div class="list-item"><span class="icon-box good">{{ icon('calendar') }}</span>
+          <div><b>{{ m.domain }}</b><div class="small muted">{{ m.start_at.strftime('%a %d %b · %H:%M UTC') }}</div></div><span class="spacer" style="flex:1"></span>
+          {% if m.meet_link %}<a class="btn btn-sm" href="{{ m.meet_link }}" target="_blank" rel="noopener">{{ icon('link', 14) }}Meet</a>{% endif %}</div>
+      {% else %}{{ empty('No meetings yet', 'They appear here as soon as a prospect confirms a time.', 'calendar') }}{% endfor %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2 style="margin:0">Inbox checker</h2><span class="spacer"></span>
+        {% if worker_ok %}{{ pill('ok', 'Running') }}{% else %}{{ pill('failed', 'Not running') }}{% endif %}</div>
+      <p class="small ink2" style="margin:0 0 12px">{% if worker_mins is none %}The inbox has never been checked — is the schedule set up?{% else %}Last checked {{ worker_mins }} min ago. Replies are read every 5 minutes.{% endif %}</p>
+      <form method="post" action="/check-inbox" data-busy="Checking…"><button class="btn btn-sm">{{ icon('refresh', 14) }}Check inbox now</button></form>
+    </div>
+  </div>
 </div>
 {% endblock %}
