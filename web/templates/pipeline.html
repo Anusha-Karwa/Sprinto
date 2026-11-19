@@ -33,7 +33,8 @@
     {% if t.meeting %}<div class="card" style="box-shadow:none;background:var(--good-soft);border-color:transparent">
       <b>{{ icon('calendar', 16) }} Meeting booked — {{ t.meeting.start_at.strftime('%a %d %b, %H:%M UTC') }}</b>
       <div class="row" style="margin-top:10px">{% if t.meeting.meet_link %}<a class="btn btn-sm" href="{{ t.meeting.meet_link }}" target="_blank" rel="noopener">{{ icon('link', 14) }}Join Meet</a>
-        <button class="btn btn-sm btn-ghost" type="button" data-copy="{{ t.meeting.meet_link }}">{{ icon('copy', 14) }}Copy link</button>{% endif %}</div>
+        <button class="btn btn-sm btn-ghost" type="button" data-copy="{{ t.meeting.meet_link }}">{{ icon('copy', 14) }}Copy link</button>{% endif %}
+        <button class="btn btn-sm btn-ghost" type="button" data-celebrate='{{ {"id": t.meeting.id, "domain": t.domain, "start": t.meeting.start_at.isoformat(), "who": (t.first_name or "") ~ " " ~ (t.last_name or "")}|tojson }}'>🎉 Replay</button></div>
       <form method="post" action="/meetings/{{ t.meeting.id }}/worth" class="row small" style="margin-top:12px">After the call — was it worth 30 minutes?
         <div class="seg"><button name="worth" value="yes" class="{{ 'on' if t.meeting.worth_30_min == true }}">Yes</button><button name="worth" value="no" class="{{ 'on' if t.meeting.worth_30_min == false }}">No</button></div></form>
     </div>{% endif %}

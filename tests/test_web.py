@@ -113,3 +113,12 @@ def test_health_and_doctor_with_data(client, test_db):
     d = client.get("/doctor", headers=AUTH).text
     agent_card = d.split(">Agent</h2>")[1].split("</div>\n  </div>")[0]
     assert "All good" in agent_card and "Problem found" not in agent_card
+
+
+def test_latest_meeting_feeds_the_celebration(client, test_db):
+    assert client.get("/meetings/latest.json", headers=AUTH).json() == {}
+    test_db.execute("INSERT INTO companies (id, domain) VALUES (1,'acme.io')")
+    test_db.execute("INSERT INTO meetings (company_id, calendar_event_id, start_at, end_at) VALUES (1,'e1', now() + interval '1 day', now() + interval '1 day 30 min')")
+    m = client.get("/meetings/latest.json", headers=AUTH).json()
+    assert m["domain"] == "acme.io" and m["id"]
+    assert 'data-latest-meeting=' in client.get("/", headers=AUTH).text

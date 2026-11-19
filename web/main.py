@@ -74,7 +74,7 @@ TITLES = {"how": "How it works", "home": "Overview", "runs": "Runs", "review": "
 def chrome(conn) -> dict:
     """Sidebar badges (what needs the Growth Lead) + inbox-checker status, on every page — in ONE round trip."""
     if conn is None:
-        return {"badges": {}, "worker_mins": None, "worker_ok": False}
+        return {"badges": {}, "worker_mins": None, "worker_ok": False, "latest_meeting": None}
     r = conn.execute("""SELECT
         (SELECT count(*) FROM drafts WHERE status IN ('pending_review','needs_human_edit') AND user_id IS NOT NULL) AS review,
         (SELECT count(*) FROM escalations WHERE status='open') AS escalations,
@@ -82,10 +82,15 @@ def chrome(conn) -> dict:
         (SELECT count(*) FROM feedback_events WHERE needs_reason) AS questions,
         (SELECT count(*) FROM companies WHERE status IN ('queued','processing')) AS queued,
         (SELECT count(*) FROM verdicts WHERE verdict='DISQUALIFIED' AND fn_check_answer IS NULL) AS fn_check,
-        (SELECT EXTRACT(EPOCH FROM now() - ticked_at)/60 FROM worker_heartbeats WHERE worker='sequence1') AS mins""").fetchone()
+        (SELECT EXTRACT(EPOCH FROM now() - ticked_at)/60 FROM worker_heartbeats WHERE worker='sequence1') AS mins,
+        (SELECT json_build_object('id', m.id, 'domain', c.domain, 'start', m.start_at, 'meet', m.meet_link,
+                                  'who', coalesce(ct.first_name || ' ' || coalesce(ct.last_name, ''), ''))
+           FROM meetings m JOIN companies c ON c.id = m.company_id
+           LEFT JOIN outreach_threads t ON t.id = m.thread_id LEFT JOIN drafts d ON d.id = t.draft_id
+           LEFT JOIN contacts ct ON ct.id = d.contact_id ORDER BY m.id DESC LIMIT 1) AS latest_meeting""").fetchone()
     mins = round(float(r["mins"])) if r["mins"] is not None else None
     badges = {k: r[k] for k in ("review", "escalations", "active", "questions", "queued", "fn_check")}
-    return {"badges": badges, "worker_mins": mins,
+    return {"badges": badges, "worker_mins": mins, "latest_meeting": r["latest_meeting"],
             "worker_ok": mins is not None and mins <= outreach_cfg()["gates"]["worker_stale_minutes"]}
 
 
@@ -461,6 +466,12 @@ def disqualified(request: Request, user: str = Depends(require_login), conn=Depe
 def disqualified_answer(verdict_id: int, really_no: str = Form(...), user: str = Depends(require_login), conn=Depends(db)):
     conn.execute("UPDATE verdicts SET fn_check_answer=%s, fn_checked_at=now() WHERE id=%s", (really_no == "yes", verdict_id))
     return RedirectResponse("/disqualified?msg=Saved.", status_code=303)
+
+
+@app.get("/meetings/latest.json")
+def latest_meeting(request: Request, user: str = Depends(require_login), conn=Depends(db)):
+    """Polled once a minute by open pages, so a booking made in the background is celebrated right away."""
+    return JSONResponse(chrome(conn)["latest_meeting"] or {}, headers={"Cache-Control": "no-store"})
 
 
 @app.post("/meetings/{meeting_id}/worth")
