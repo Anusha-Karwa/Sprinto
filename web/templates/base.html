@@ -251,6 +251,21 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
 .photo-hero > .row{flex-wrap:wrap}
 @media (min-width:701px) and (max-width:1100px){.side .nav .nav-group{font-size:0 !important;padding:0 !important;height:0 !important;overflow:hidden;margin:4px 8px !important;border-top:1px solid var(--side-line)}}
 @media (max-width:1100px){.journey{grid-template-columns:repeat(7,minmax(88px,1fr)) !important;overflow-x:auto;padding-bottom:2px} .step{padding:10px} .step .desc{display:none} .step .n{font-size:20px;margin-top:4px} .step .num-tag{display:none}}
+
+/* ---- menu v2: CTA + icon tiles ---- */
+.side-cta{display:flex;align-items:center;gap:10px;width:100%;margin:2px 0 8px;padding:9px 12px;border:0;border-radius:11px;cursor:pointer;
+  color:#fff;font:600 13.5px var(--font);background:linear-gradient(100deg,var(--brand-1),var(--brand-4));box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.side-cta:hover{filter:brightness(1.08)} .side-cta .kbd{margin-left:auto;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff}
+.nav a{gap:11px !important}
+.ni{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:rgba(255,255,255,.06);color:var(--side-ink);flex:none;transition:background .15s}
+.nav a:hover .ni{background:rgba(255,255,255,.12);color:#fff}
+.nav a.on{background:rgba(255,255,255,.1) !important;box-shadow:none !important}
+.nav a.on .ni{background:linear-gradient(135deg,var(--brand-2),var(--brand-4));color:#fff}
+.nav a{padding:5px 8px !important}
+@media (min-width:701px) and (max-width:1100px){
+  .side-cta{justify-content:center;padding:9px 0;margin:2px 0 6px} .side-cta .nl{display:none}
+  .nav a{padding:4px 0 !important}
+}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 {% block head %}{% endblock %}
@@ -259,15 +274,16 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
 <div class="app">
   <aside class="side" aria-label="Main navigation">
     <div class="brand"><div class="logo">OA</div><div><b>Outbound Agent</b><span>for Sprinto · Growth</span></div></div>
+    <button class="side-cta" type="button" data-open="newrun" title="New run — research a list of companies">{{ icon('plus', 16) }}<span class="nl">New run</span><span class="kbd nl">N</span></button>
     <nav class="nav">
-      <a href="/" class="{{ 'on' if nav=='home' }}" title="Overview">{{ icon('home') }}<span class="nl">Overview</span></a>
-      <div class="nav-group">Your work</div>
-      <a href="/review" class="{{ 'on' if nav=='review' }}" title="Review queue">{{ icon('inbox') }}<span class="nl">Review queue</span>{% if badges.review %}<span class="badge hot">{{ badges.review }}</span>{% endif %}</a>
-      <a href="/pipeline" class="{{ 'on' if nav=='pipeline' }}" title="Pipeline">{{ icon('kanban') }}<span class="nl">Pipeline</span>{% if badges.escalations %}<span class="badge hot" title="handed to you">{{ badges.escalations }}</span>{% elif badges.active %}<span class="badge">{{ badges.active }}</span>{% endif %}</a>
-      <a href="/questions" class="{{ 'on' if nav=='questions' }}" title="Questions">{{ icon('help') }}<span class="nl">Questions</span>{% if badges.questions %}<span class="badge hot">{{ badges.questions }}</span>{% endif %}</a>
-      <a href="/disqualified" class="{{ 'on' if nav=='disqualified' }}" title="Really a no?">{{ icon('scale') }}<span class="nl">Really a no?</span>{% if badges.fn_check %}<span class="badge">{{ badges.fn_check }}</span>{% endif %}</a>
-      <div class="nav-group">Research</div>
-      <a href="/runs" class="{{ 'on' if nav=='runs' }}" title="Runs">{{ icon('list') }}<span class="nl">Runs</span>{% if badges.queued %}<span class="badge">{{ badges.queued }}</span>{% endif %}</a>
+      <div class="nav-group">Work</div>
+      <a href="/" class="{{ 'on' if nav=='home' }}" title="Overview"><span class="ni">{{ icon('home', 16) }}</span><span class="nl">Overview</span></a>
+      <a href="/review" class="{{ 'on' if nav=='review' }}" title="Review queue — approve, edit or reject drafts"><span class="ni">{{ icon('inbox', 16) }}</span><span class="nl">Review queue</span>{% if badges.review %}<span class="badge hot">{{ badges.review }}</span>{% endif %}</a>
+      <a href="/pipeline" class="{{ 'on' if nav=='pipeline' }}" title="Pipeline — every conversation"><span class="ni">{{ icon('kanban', 16) }}</span><span class="nl">Pipeline</span>{% if badges.escalations %}<span class="badge hot" title="handed to you">{{ badges.escalations }}</span>{% elif badges.active %}<span class="badge">{{ badges.active }}</span>{% endif %}</a>
+      <a href="/runs" class="{{ 'on' if nav=='runs' }}" title="Runs — research progress"><span class="ni">{{ icon('list', 16) }}</span><span class="nl">Runs</span>{% if badges.queued %}<span class="badge">{{ badges.queued }}</span>{% endif %}</a>
+      <div class="nav-group">Checks</div>
+      <a href="/questions" class="{{ 'on' if nav=='questions' }}" title="Questions — why did you change a fact?"><span class="ni">{{ icon('help', 16) }}</span><span class="nl">Questions</span>{% if badges.questions %}<span class="badge hot">{{ badges.questions }}</span>{% endif %}</a>
+      <a href="/disqualified" class="{{ 'on' if nav=='disqualified' }}" title="Really a no? — spot-check rejected companies"><span class="ni">{{ icon('scale', 16) }}</span><span class="nl">Really a no?</span>{% if badges.fn_check %}<span class="badge">{{ badges.fn_check }}</span>{% endif %}</a>
     </nav>
     <div class="side-foot">
       <div class="safety" title="Every email and calendar invite goes only to {{ my_email }} — never to a real prospect">{{ icon('shield', 15) }}
@@ -285,7 +301,7 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
       <button class="btn btn-ghost burger" type="button" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">{{ icon('menu') }}</button>
       <div><h1>{% block heading %}{{ title }}{% endblock %}</h1>{% block subheading %}{% endblock %}</div>
       <div class="spacer"></div>
-      {% block actions %}<button class="btn btn-primary" type="button" data-open="newrun">{{ icon('plus', 16) }}New run</button>{% endblock %}
+      {% block actions %}{% endblock %}
     </div>
     <main class="content">{% block body %}{% endblock %}</main>
   </div>
