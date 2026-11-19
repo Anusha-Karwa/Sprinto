@@ -268,8 +268,6 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
       <a href="/disqualified" class="{{ 'on' if nav=='disqualified' }}" title="Really a no?">{{ icon('scale') }}<span class="nl">Really a no?</span>{% if badges.fn_check %}<span class="badge">{{ badges.fn_check }}</span>{% endif %}</a>
       <div class="nav-group">Research</div>
       <a href="/runs" class="{{ 'on' if nav=='runs' }}" title="Runs">{{ icon('list') }}<span class="nl">Runs</span>{% if badges.queued %}<span class="badge">{{ badges.queued }}</span>{% endif %}</a>
-      <div class="nav-group">Insight</div>
-      <a href="/health" class="{{ 'on' if nav=='health' }}" title="Health">{{ icon('activity') }}<span class="nl">Health</span></a>
     </nav>
     <div class="side-foot">
       <div class="safety" title="Every email and calendar invite goes only to {{ my_email }} — never to a real prospect">{{ icon('shield', 15) }}
@@ -316,7 +314,7 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
 <dialog id="keys"><div class="dlg-body"><h2>Keyboard shortcuts</h2>
   <table class="small"><tbody>
   <tr><td><span class="kbd">N</span></td><td>New run</td></tr>
-  <tr><td><span class="kbd">G</span> then <span class="kbd">O</span> / <span class="kbd">R</span> / <span class="kbd">P</span> / <span class="kbd">H</span></td><td>Go to Overview / Review / Pipeline / Health</td></tr>
+  <tr><td><span class="kbd">G</span> then <span class="kbd">O</span> / <span class="kbd">R</span> / <span class="kbd">P</span></td><td>Go to Overview / Review / Pipeline</td></tr>
   <tr><td><span class="kbd">A</span></td><td>Review: approve as-is</td></tr>
   <tr><td><span class="kbd">E</span></td><td>Review: approve with your edits</td></tr>
   <tr><td><span class="kbd">R</span></td><td>Review: reject (asks for a reason)</td></tr>
@@ -405,7 +403,7 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
   document.addEventListener('keydown',e=>{
     if(e.target.closest('input,textarea,select,[contenteditable]')||e.metaKey||e.ctrlKey||e.altKey) return;
     const k=e.key.toLowerCase();
-    if(g){ g=false; const go={o:'/',r:'/review',p:'/pipeline',h:'/health'}[k]; if(go){location.href=go} return }
+    if(g){ g=false; const go={o:'/',r:'/review',p:'/pipeline'}[k]; if(go){location.href=go} return }
     if(k==='g'){g=true; setTimeout(()=>g=false,900); return}
     if(k==='n'){ $('#newrun')?.showModal(); e.preventDefault() }
     if(e.key==='?'){ $('#keys')?.showModal() }

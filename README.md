@@ -158,8 +158,8 @@ pytest
 | What | Command / page |
 |---|---|
 | The case: research → email to MY_EMAIL | `python run.py domains.csv` (`--dry-run` drafts only) |
-| Web app (Vercel) | `/` overview · `/review` · `/pipeline` · `/questions` · `/disqualified` · `/runs` · `/health` |
-| Builder-only pages (not in the menu) | `/doctor` (layer-by-layer checks) · `/loop` (feedback-loop inspector) |
+| Web app (Vercel) | `/` overview · `/review` · `/pipeline` · `/questions` · `/disqualified` · `/runs` |
+| Builder-only pages (not in the menu) | `/health` (funnel, kill criteria, alerts) · `/doctor` (layer-by-layer checks) · `/loop` (feedback-loop inspector) |
 | Inbox worker (Seq 1 + Seq 2 + gates) | `python -m outreach.worker [--once] [--clock ISO]` · on Vercel `/api/cron/worker` |
 | Health check, layer by layer | `python -m agent.doctor --user anu [--company acme.io] [--thread 12]` |
 | 6 scripted prospects end to end | `python -m eval.simulate_prospects` |
