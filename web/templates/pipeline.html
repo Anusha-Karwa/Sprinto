@@ -62,11 +62,6 @@
     {% if t.holds %}<div class="t-item"><div class="small"><b>Slots</b></div>
       {% for h in t.holds %}<span class="pill {{ 'pill-good' if h.status == 'booked' else 'pill-neutral' }}" style="margin:2px">{{ h.start_at.strftime('%a %d %b %H:%M UTC') }} · {{ h.status }}</span>{% endfor %}</div>{% endif %}
     </div>
-
-    <details style="margin-top:8px"><summary class="small">State (for debugging)</summary>
-      <table class="small"><tbody><tr><td class="muted">reply_status</td><td>{{ t.reply_status }}</td></tr><tr><td class="muted">sequence</td><td>{{ t.sequence }}</td></tr>
-      <tr><td class="muted">current step</td><td>{{ t.current_node }}</td></tr><tr><td class="muted">reply deadline</td><td>{{ t.deadline_at.strftime('%d %b %H:%M UTC') if t.deadline_at else '–' }}</td></tr>
-      <tr><td class="muted">CRM reason</td><td>{{ t.crm_reason or '–' }}</td></tr></tbody></table></details>
   </div>
   <div class="dlg-foot"><button class="btn" data-close>Close</button></div>
 </dialog>

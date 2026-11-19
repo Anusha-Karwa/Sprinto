@@ -271,8 +271,6 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
       <a href="/runs" class="{{ 'on' if nav=='runs' }}" title="Runs">{{ icon('list') }}<span class="nl">Runs</span>{% if badges.queued %}<span class="badge">{{ badges.queued }}</span>{% endif %}</a>
       <div class="nav-group">Insight</div>
       <a href="/health" class="{{ 'on' if nav=='health' }}" title="Health">{{ icon('activity') }}<span class="nl">Health</span></a>
-      <a href="/loop" class="{{ 'on' if nav=='loop' }}" title="Loop inspector">{{ icon('loop') }}<span class="nl">Loop inspector</span></a>
-      <a href="/doctor" class="{{ 'on' if nav=='doctor' }}" title="Doctor">{{ icon('stethoscope') }}<span class="nl">Doctor</span></a>
     </nav>
     <div class="side-foot">
       <div class="safety" title="Every email and calendar invite goes only to {{ my_email }} — never to a real prospect">{{ icon('shield', 15) }}

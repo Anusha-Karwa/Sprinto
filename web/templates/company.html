@@ -2,7 +2,7 @@
 {% block heading %}{{ c.domain }}{% endblock %}
 {% block subheading %}<div class="small muted"><a href="/runs/{{ c.run_id }}">Run {{ c.run_id }}</a> / {{ c.domain }} ·
   <a href="https://{{ c.domain }}" target="_blank" rel="noopener">visit site {{ icon('link', 12) }}</a></div>{% endblock %}
-{% block actions %}<a class="btn" href="/doctor?company={{ c.domain }}">{{ icon('stethoscope', 16) }}Check with Doctor</a>{% endblock %}
+{% block actions %}<a class="btn" href="https://{{ c.domain }}" target="_blank" rel="noopener">{{ icon('link', 16) }}Visit website</a>{% endblock %}
 {% block body %}
 <div class="grid g-main">
   <div class="stack">
