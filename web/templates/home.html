@@ -29,13 +29,13 @@
 <div class="row section" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">The journey, live</h2>
   <span class="small muted">Each step is one thing the robot does. Click to see it.</span></div>
 {% set steps = [
-  ('Research', k.companies, 'Reads each website, keeps the useful parts', 'search', '/runs', '#2f23ab'),
-  ('Qualify', k.qualified, 'Scores fit out of 100 with quotes', 'scale', '/runs', '#4a2aa9'),
-  ('Find person', k.people, 'Picks CEO / CTO / CISO by size', 'user', '/runs', '#6130a6'),
-  ('Write email', k.drafted, 'Hook from their site + 1 Sprinto claim', 'edit', '/review', '#7b34a4'),
-  ('You review', k.pending, 'Nothing is sent without you', 'inbox', '/review', '#963aa1'),
-  ('Reply read', k.replied, 'Interested? not now? unclear?', 'mail', '/pipeline', '#b03fa0'),
-  ('Call booked', k.meetings, 'Times proposed, Meet invite sent', 'calendar', '/pipeline', '#ca459e'),
+  ('Research', k.companies, 'Reads each website, keeps the useful parts', 'search', '/runs', 'color-mix(in oklab, var(--brand-1) 100%, var(--brand-4))'),
+  ('Qualify', k.qualified, 'Scores fit out of 100 with quotes', 'scale', '/runs', 'color-mix(in oklab, var(--brand-1) 83%, var(--brand-4))'),
+  ('Find person', k.people, 'Picks CEO / CTO / CISO by size', 'user', '/runs', 'color-mix(in oklab, var(--brand-1) 67%, var(--brand-4))'),
+  ('Write email', k.drafted, 'Hook from their site + 1 Sprinto claim', 'edit', '/review', 'color-mix(in oklab, var(--brand-1) 50%, var(--brand-4))'),
+  ('You review', k.pending, 'Nothing is sent without you', 'inbox', '/review', 'color-mix(in oklab, var(--brand-1) 33%, var(--brand-4))'),
+  ('Reply read', k.replied, 'Interested? not now? unclear?', 'mail', '/pipeline', 'color-mix(in oklab, var(--brand-1) 17%, var(--brand-4))'),
+  ('Call booked', k.meetings, 'Times proposed, Meet invite sent', 'calendar', '/pipeline', 'color-mix(in oklab, var(--brand-1) 0%, var(--brand-4))'),
 ] %}
 <div class="journey">
 {% for name, n, desc, ic, href, color in steps %}

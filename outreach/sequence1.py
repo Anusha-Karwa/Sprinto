@@ -147,10 +147,13 @@ def tick(conn, inbox, llm, *, now: datetime | None = None, notify=notify_growth_
             report["skipped"].append((gid, "own message"))
             continue
         bounce = is_bounce(m.from_addr, m.subject)
+        # created_at = when the prospect SENT it (Date header), falling back to this run's clock. Relative dates in the
+        # reply ("Thursday", "tomorrow") are resolved against this — never against the server's wall clock.
+        sent_at = m.date if getattr(m, "date", None) else now
         row = conn.execute("""INSERT INTO outreach_messages (thread_id, gmail_message_id, rfc_message_id, direction, kind, status,
-                                                             subject, body)
-                              VALUES (%s,%s,%s,'in',%s,'received',%s,%s) ON CONFLICT (gmail_message_id) DO NOTHING RETURNING id""",
-                           (t["id"], gid, m.rfc_message_id, "bounce" if bounce else "reply", m.subject, m.body)).fetchone()
+                                                             subject, body, created_at)
+                              VALUES (%s,%s,%s,'in',%s,'received',%s,%s,%s) ON CONFLICT (gmail_message_id) DO NOTHING RETURNING id""",
+                           (t["id"], gid, m.rfc_message_id, "bounce" if bounce else "reply", m.subject, m.body, sent_at)).fetchone()
         if not row:                       # another worker got there first → exactly once
             continue
         try:
