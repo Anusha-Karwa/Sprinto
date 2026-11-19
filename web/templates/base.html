@@ -79,15 +79,40 @@ h1{font-size:22px;font-weight:650;letter-spacing:-.01em;margin:0} h2{font-size:1
 .main::before{content:"";position:absolute;inset:0 0 auto 0;height:360px;z-index:-1;pointer-events:none;background:var(--hero-img) center/cover;opacity:var(--wash);-webkit-mask-image:linear-gradient(#000 0%,transparent 100%);mask-image:linear-gradient(#000 0%,transparent 100%)}
 .top{background:transparent!important;backdrop-filter:none!important;border-bottom-color:transparent!important}
 .btn-light{color:var(--brand-1)!important}
-.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:14px 28px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top{position:relative;z-index:1;display:flex;align-items:center;gap:12px;padding:14px 28px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .top .spacer{flex:1}
 .content{padding:24px 28px 80px;max-width:1240px}
 .btn.burger{display:none}
-@media (max-width:900px){
+/* Overview has no separate title bar — the hero is the heading */
+.top-home{display:none}
+/* medium widths (incl. zoomed browsers): the menu stays on the page as a slim icon rail */
+@media (min-width:701px) and (max-width:1100px){
+  .app{grid-template-columns:68px 1fr}
+  .side{padding:12px 8px !important;align-items:center}
+  .brand{padding:2px 0 10px !important} .brand > div:last-child{display:none}
+  .nav{width:100%} .nav a{justify-content:center;padding:9px 0 !important;position:relative} .nav .nl{display:none}
+  .nav .badge{position:absolute;top:2px;right:6px;min-width:16px;height:16px;line-height:16px;padding:0 4px;font-size:10px}
+  .nav-group{font-size:0 !important;padding:0 !important;height:0;margin:6px 8px;border-top:1px solid var(--side-line)}
+  .side-foot{width:100%;align-items:center} .safety{justify-content:center;padding:7px !important} .safety-txt{display:none}
+  .side-meta{flex-direction:column;gap:4px !important} .side-meta .small{display:none}
+  .side-meta [data-open="keys"]{display:none}
+  .content{padding:20px 20px 80px}
+}
+@media (min-width:701px) and (max-width:1100px) and (max-height:640px){
+  .nav a{padding:5px 0 !important} .nav-group{margin:3px 8px} .brand{padding-bottom:4px !important}
+  .side-foot{padding-top:6px !important;gap:4px !important} .safety{padding:5px !important}
+}
+@media (min-width:1101px) and (max-height:560px){
+  .nav a{padding:4px 10px !important} .nav-group{font-size:0 !important;padding:0 !important;height:0;margin:4px 10px;border-top:1px solid var(--side-line)}
+  .brand span{display:none}
+}
+/* phones: the menu slides in from the ☰ button */
+@media (max-width:700px){
   .app{grid-template-columns:1fr}
   .side{position:fixed;inset:0 auto 0 0;width:260px;z-index:20;transform:translateX(-105%);transition:transform .2s;box-shadow:var(--shadow)}
   body.nav-open .side{transform:none}
   .btn.burger{display:inline-flex} .top{padding:12px 16px;flex-wrap:nowrap} .top > div > .small.muted{display:none} .top h1{font-size:19px} .hero-num{font-size:46px} .content{padding:16px 16px 80px}
+  .top-home{display:flex;padding:10px 12px 0} .top-home > :not(.burger){display:none}
 }
 /* ---------- components ---------- */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}
@@ -220,6 +245,12 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
 .celebrate-title{font-weight:700;font-size:16px} .celebrate-sub{font-size:13px;color:rgba(255,255,255,.88);overflow:hidden;text-overflow:ellipsis}
 #confetti{position:fixed;inset:0;z-index:69;pointer-events:none}
 @media (prefers-reduced-motion: reduce){.celebrate,.celebrate-emoji{animation:none}}
+.hero-tiles{flex:1 1 340px;max-width:100%;grid-template-columns:repeat(2,minmax(140px,1fr));gap:10px}
+@media (max-width:1250px){.hero-tiles{flex-basis:100%;grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:760px){.hero-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.photo-hero > .row{flex-wrap:wrap}
+@media (min-width:701px) and (max-width:1100px){.side .nav .nav-group{font-size:0 !important;padding:0 !important;height:0 !important;overflow:hidden;margin:4px 8px !important;border-top:1px solid var(--side-line)}}
+@media (max-width:1100px){.journey{grid-template-columns:repeat(7,minmax(88px,1fr)) !important;overflow-x:auto;padding-bottom:2px} .step{padding:10px} .step .desc{display:none} .step .n{font-size:20px;margin-top:4px} .step .num-tag{display:none}}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 {% block head %}{% endblock %}
@@ -229,19 +260,19 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
   <aside class="side" aria-label="Main navigation">
     <div class="brand"><div class="logo">OA</div><div><b>Outbound Agent</b><span>for Sprinto · Growth</span></div></div>
     <nav class="nav">
-      <a href="/" class="{{ 'on' if nav=='home' }}">{{ icon('home') }}Overview</a>
-      <a href="/how" class="{{ 'on' if nav=='how' }}">{{ icon('sparkles') }}How it works</a>
+      <a href="/" class="{{ 'on' if nav=='home' }}" title="Overview">{{ icon('home') }}<span class="nl">Overview</span></a>
+      <a href="/how" class="{{ 'on' if nav=='how' }}" title="How it works">{{ icon('sparkles') }}<span class="nl">How it works</span></a>
       <div class="nav-group">Your work</div>
-      <a href="/review" class="{{ 'on' if nav=='review' }}">{{ icon('inbox') }}Review queue{% if badges.review %}<span class="badge hot">{{ badges.review }}</span>{% endif %}</a>
-      <a href="/pipeline" class="{{ 'on' if nav=='pipeline' }}">{{ icon('kanban') }}Pipeline{% if badges.escalations %}<span class="badge hot" title="handed to you">{{ badges.escalations }}</span>{% elif badges.active %}<span class="badge">{{ badges.active }}</span>{% endif %}</a>
-      <a href="/questions" class="{{ 'on' if nav=='questions' }}">{{ icon('help') }}Questions{% if badges.questions %}<span class="badge hot">{{ badges.questions }}</span>{% endif %}</a>
-      <a href="/disqualified" class="{{ 'on' if nav=='disqualified' }}">{{ icon('scale') }}Really a no?{% if badges.fn_check %}<span class="badge">{{ badges.fn_check }}</span>{% endif %}</a>
+      <a href="/review" class="{{ 'on' if nav=='review' }}" title="Review queue">{{ icon('inbox') }}<span class="nl">Review queue</span>{% if badges.review %}<span class="badge hot">{{ badges.review }}</span>{% endif %}</a>
+      <a href="/pipeline" class="{{ 'on' if nav=='pipeline' }}" title="Pipeline">{{ icon('kanban') }}<span class="nl">Pipeline</span>{% if badges.escalations %}<span class="badge hot" title="handed to you">{{ badges.escalations }}</span>{% elif badges.active %}<span class="badge">{{ badges.active }}</span>{% endif %}</a>
+      <a href="/questions" class="{{ 'on' if nav=='questions' }}" title="Questions">{{ icon('help') }}<span class="nl">Questions</span>{% if badges.questions %}<span class="badge hot">{{ badges.questions }}</span>{% endif %}</a>
+      <a href="/disqualified" class="{{ 'on' if nav=='disqualified' }}" title="Really a no?">{{ icon('scale') }}<span class="nl">Really a no?</span>{% if badges.fn_check %}<span class="badge">{{ badges.fn_check }}</span>{% endif %}</a>
       <div class="nav-group">Research</div>
-      <a href="/runs" class="{{ 'on' if nav=='runs' }}">{{ icon('list') }}Runs{% if badges.queued %}<span class="badge">{{ badges.queued }}</span>{% endif %}</a>
+      <a href="/runs" class="{{ 'on' if nav=='runs' }}" title="Runs">{{ icon('list') }}<span class="nl">Runs</span>{% if badges.queued %}<span class="badge">{{ badges.queued }}</span>{% endif %}</a>
       <div class="nav-group">Insight</div>
-      <a href="/health" class="{{ 'on' if nav=='health' }}">{{ icon('activity') }}Health</a>
-      <a href="/loop" class="{{ 'on' if nav=='loop' }}">{{ icon('loop') }}Loop inspector</a>
-      <a href="/doctor" class="{{ 'on' if nav=='doctor' }}">{{ icon('stethoscope') }}Doctor</a>
+      <a href="/health" class="{{ 'on' if nav=='health' }}" title="Health">{{ icon('activity') }}<span class="nl">Health</span></a>
+      <a href="/loop" class="{{ 'on' if nav=='loop' }}" title="Loop inspector">{{ icon('loop') }}<span class="nl">Loop inspector</span></a>
+      <a href="/doctor" class="{{ 'on' if nav=='doctor' }}" title="Doctor">{{ icon('stethoscope') }}<span class="nl">Doctor</span></a>
     </nav>
     <div class="side-foot">
       <div class="safety" title="Every email and calendar invite goes only to {{ my_email }} — never to a real prospect">{{ icon('shield', 15) }}
@@ -255,7 +286,7 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
     </div>
   </aside>
   <div class="main">
-    <div class="top">
+    <div class="top {% block topclass %}{% endblock %}">
       <button class="btn btn-ghost burger" type="button" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">{{ icon('menu') }}</button>
       <div><h1>{% block heading %}{{ title }}{% endblock %}</h1>{% block subheading %}{% endblock %}</div>
       <div class="spacer"></div>

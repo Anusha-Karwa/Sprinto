@@ -3,6 +3,7 @@
 {% block scripts %}<script>
 (function(){const h=new Date().getHours(); const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening'; const el=document.getElementById('greet'); if(el) el.textContent=g+', {{ lead }}';})();
 </script>{% endblock %}
+{% block topclass %}top-home{% endblock %}
 {% block body %}
 <section class="photo-hero">
   <div class="row" style="align-items:flex-start;justify-content:space-between;gap:24px">
@@ -17,7 +18,7 @@
         <a class="btn btn-outline-light" href="/how">{{ icon('sparkles', 16) }}How it works</a>
       </div>
     </div>
-    <div class="grid" style="grid-template-columns:repeat(2,minmax(150px,1fr));gap:10px;min-width:min(100%,340px)">
+    <div class="grid hero-tiles">
       <div class="glass"><div class="stat-label">Reply rate</div><div class="stat-value">{{ (k.reply_rate|string ~ '%') if k.reply_rate is not none else '–' }}</div><div class="stat-sub">{{ k.replied }} of {{ k.emailed }} emailed</div></div>
       <div class="glass"><div class="stat-label">Time per company</div><div class="stat-value">{{ (k.avg_secs|string ~ 's') if k.avg_secs else '–' }}</div><div class="stat-sub">vs 15–20 min by hand</div></div>
       <div class="glass"><div class="stat-label">Emails rewritten</div><div class="stat-value">{{ (k.edit_rate|string ~ '%') if k.edit_rate is not none else '–' }}</div><div class="stat-sub">target under 20%</div></div>
