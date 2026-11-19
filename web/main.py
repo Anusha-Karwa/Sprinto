@@ -67,7 +67,7 @@ def require_login(creds: HTTPBasicCredentials = Depends(security)) -> str:
     return creds.username or settings().reviewer_id
 
 
-TITLES = {"how": "How it works", "home": "Overview", "runs": "Runs", "review": "Review queue", "pipeline": "Pipeline", "questions": "Questions for you",
+TITLES = {"home": "Overview", "runs": "Runs", "review": "Review queue", "pipeline": "Pipeline", "questions": "Questions for you",
           "health": "Health", "disqualified": "Was this really a no?", "loop": "Loop inspector", "doctor": "Doctor"}
 
 
@@ -195,12 +195,6 @@ def home(request: Request, user: str = Depends(require_login), conn=Depends(db))
     return page(request, "home.html", "home", k=k, funnel=funnel, upcoming=upcoming, activity=activity,
                 lead=settings().growth_lead_name)
 
-
-@app.get("/how", response_class=HTMLResponse)
-def how(request: Request, user: str = Depends(require_login), conn=Depends(db)):
-    """A plain-language explainer of what the robot does, step by step, with live numbers."""
-    r = conn.execute(f"SELECT {FUNNEL_SQL}, (SELECT count(*) FROM contacts WHERE rank=1) AS people").fetchone()
-    return page(request, "how.html", "how", r=r)
 
 
 FUNNEL = [("researched", "Researched"), ("qualified", "Qualified"), ("emailed", "Emailed"), ("replied", "Replied"),

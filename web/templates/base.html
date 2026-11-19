@@ -261,7 +261,6 @@ code{font-size:12.5px;background:var(--surface-2);padding:1px 6px;border-radius:
     <div class="brand"><div class="logo">OA</div><div><b>Outbound Agent</b><span>for Sprinto · Growth</span></div></div>
     <nav class="nav">
       <a href="/" class="{{ 'on' if nav=='home' }}" title="Overview">{{ icon('home') }}<span class="nl">Overview</span></a>
-      <a href="/how" class="{{ 'on' if nav=='how' }}" title="How it works">{{ icon('sparkles') }}<span class="nl">How it works</span></a>
       <div class="nav-group">Your work</div>
       <a href="/review" class="{{ 'on' if nav=='review' }}" title="Review queue">{{ icon('inbox') }}<span class="nl">Review queue</span>{% if badges.review %}<span class="badge hot">{{ badges.review }}</span>{% endif %}</a>
       <a href="/pipeline" class="{{ 'on' if nav=='pipeline' }}" title="Pipeline">{{ icon('kanban') }}<span class="nl">Pipeline</span>{% if badges.escalations %}<span class="badge hot" title="handed to you">{{ badges.escalations }}</span>{% elif badges.active %}<span class="badge">{{ badges.active }}</span>{% endif %}</a>

@@ -87,7 +87,7 @@ def test_pipeline_page(client, test_db):
     assert "No conversations yet" in client.get("/pipeline", headers=AUTH).text
 
 
-@pytest.mark.parametrize("path", ["/how", "/hero.webp", "/themes/aurora.webp", "/health", "/disqualified", "/loop", "/doctor", "/doctor?company=acme.io", "/pipeline"])
+@pytest.mark.parametrize("path", ["/hero.webp", "/themes/aurora.webp", "/health", "/disqualified", "/loop", "/doctor", "/doctor?company=acme.io", "/pipeline"])
 def test_phase_e_pages_render_empty(client, path):
     r = client.get(path, headers=AUTH)
     assert r.status_code == 200, r.text[:500]
