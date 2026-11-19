@@ -108,9 +108,9 @@ def hero_image():
 
 @app.get("/themes/{name}.webp", include_in_schema=False)
 def theme_image(name: str):
-    """Theme background pictures (public/themes/). Served by Vercel's CDN in production; by this route locally."""
+    """The Aurora background picture (public/themes/). Served by Vercel's CDN in production; by this route locally."""
     from fastapi.responses import FileResponse
-    if name not in ("aurora", "ocean", "sunset", "forest", "classic"):
+    if name != "aurora":
         raise HTTPException(404)
     return FileResponse(Path(__file__).resolve().parent.parent / "public" / "themes" / f"{name}.webp", media_type="image/webp",
                         headers={"Cache-Control": "public, max-age=604800"})
